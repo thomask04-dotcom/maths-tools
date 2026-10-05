@@ -17,12 +17,11 @@ svg{display:block;width:100%;max-width:860px;margin:0 auto;height:auto;touch-act
 .hint{font-size:13px;color:#6b7280;padding:6px 10px}
 </style></head><body>
 <div class="bar"><span class="title">Fraction Shapes</span>
-<button data-m="shape" class="on">Shapes</button><button data-m="coll">Collections</button><button data-m="quiz">Equal parts?</button>
+<button data-m="shape" class="on">Fraction strips</button><button data-m="coll">Collections</button><button data-m="quiz">Equal parts?</button>
 </div>
 <div class="bar" id="shapeBar">
-<span>Shape:</span><button data-k="circle" class="on">Circle</button><button data-k="square">Square</button><button data-k="rect">Rectangle</button>
 <span>Parts:</span><button class="p" data-p="2">2</button><button class="p on" data-p="4">4</button><button class="p" data-p="8">8</button><button class="p" data-p="3">3</button><button class="p" data-p="5">5</button><button class="p" data-p="6">6</button><button class="p" data-p="10">10</button>
-<button id="clearBtn">Clear shading</button>
+<button id="wholeBtn" class="on">Show 1 whole</button><button id="labBtn">Label the parts</button><button id="clearBtn">Clear shading</button>
 </div>
 <div class="bar" id="collBar" style="display:none">
 <span>Counters</span><button id="nm">−</button><span class="v" id="nv">8</span><button id="np">+</button>
@@ -31,7 +30,7 @@ svg{display:block;width:100%;max-width:860px;margin:0 auto;height:auto;touch-act
 <div id="say"></div>
 <div id="yn"><button id="yes">👍 Yes, equal parts</button><button id="no">👎 No, not equal</button></div>
 <svg id="svg" viewBox="0 0 860 440"></svg>
-<div class="hint">Shapes: tap the parts to shade them. Collections: counters are shared equally into groups, and you tap a group to shade it. "Equal parts?" asks whether a shape has been cut into equal parts.</div>
+<div class="hint">Fraction strips: a strip (like a paper strip or a ribbon) is cut into equal lengths. Tap the parts to shade them. Compare each part with the whole strip above it. Collections: counters are shared equally into groups, and you tap a group to shade it. "Equal parts?" asks whether a strip has been cut into equal parts.</div>
 <script>
 const NS='http://www.w3.org/2000/svg';
 function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
@@ -40,32 +39,29 @@ const $=id=>document.getElementById(id);
 const svg=$('svg'),CX=300,CY=220,SH='#f97316';
 const NAMES={2:'halves',3:'thirds',4:'quarters',5:'fifths',6:'sixths',8:'eighths',10:'tenths'};
 const ONE={2:'half',3:'third',4:'quarter',5:'fifth',6:'sixth',8:'eighth',10:'tenth'};
-let mode='shape',kind='circle',parts=4,shaded=new Set(),N=8,G=2,gShaded=new Set(),quiz=null;
+let mode='shape',showWhole=true,labels=false,parts=4,shaded=new Set(),N=8,G=2,gShaded=new Set(),quiz=null;
 function frac(x,y,n,d,fs,col){txt(svg,x,y-fs*0.25,String(n),fs,col,'800');el('line',{x1:x-fs*0.6,x2:x+fs*0.6,y1:y,y2:y,stroke:col,'stroke-width':3},svg);txt(svg,x,y+fs*0.95,String(d),fs,col,'800');}
-function pieces(kind,n,unequal){
-  // returns list of SVG path strings
-  const out=[];
-  if(kind==='circle'){const r=170;let cuts=Array.from({length:n+1},(_,i)=>i/n);if(unequal)cuts=unequalCuts(n);
-    for(let i=0;i<n;i++){const a1=-Math.PI/2+cuts[i]*2*Math.PI,a2=-Math.PI/2+cuts[i+1]*2*Math.PI;
-      out.push(n===1?`M${CX-r} ${CY}a${r} ${r} 0 1 0 ${2*r} 0a${r} ${r} 0 1 0 ${-2*r} 0`:`M${CX} ${CY}L${CX+r*Math.cos(a1)} ${CY+r*Math.sin(a1)}A${r} ${r} 0 ${a2-a1>Math.PI?1:0} 1 ${CX+r*Math.cos(a2)} ${CY+r*Math.sin(a2)}Z`);}}
-  else{const w=kind==='square'?340:480,h=340,x0=CX-w/2+(kind==='rect'?60:0),y0=CY-h/2;
-    if(n===4&&kind==='square'&&!unequal){for(let i=0;i<4;i++){const cx=x0+(i%2)*w/2,cy=y0+Math.floor(i/2)*h/2;out.push(`M${cx} ${cy}h${w/2}v${h/2}h${-w/2}Z`);}}
-    else if(n===8&&!unequal){for(let i=0;i<8;i++){const cx=x0+(i%4)*w/4,cy=y0+Math.floor(i/4)*h/2;out.push(`M${cx} ${cy}h${w/4}v${h/2}h${-w/4}Z`);}}
-    else{let cuts=Array.from({length:n+1},(_,i)=>i/n);if(unequal)cuts=unequalCuts(n);for(let i=0;i<n;i++){const xa=x0+cuts[i]*w,xb=x0+cuts[i+1]*w;out.push(`M${xa} ${y0}H${xb}V${y0+h}H${xa}Z`);}}}
-  return out;
+const SX=50,SW=760,SY=170,SHH=100;
+function pieces(n,unequal){
+  let cuts=Array.from({length:n+1},(_,i)=>i/n);if(unequal)cuts=unequalCuts(n);
+  return cuts.slice(0,n).map((c,i)=>({x:SX+c*SW,w:(cuts[i+1]-c)*SW}));
 }
-function unequalCuts(n){let c;do{c=[0];for(let i=1;i<n;i++)c.push(i/n+(Math.random()-.5)*0.7/n);c.push(1);c.sort((a,b)=>a-b);}while(Math.max(...c.slice(1).map((v,i)=>v-c[i])) - Math.min(...c.slice(1).map((v,i)=>v-c[i]))<0.12);return c;}
+function unequalCuts(n){let c;do{c=[0];for(let i=1;i<n;i++)c.push(i/n+(Math.random()-.5)*0.7/n);c.push(1);c.sort((a,b)=>a-b);}while(Math.max(...c.slice(1).map((v,i)=>v-c[i])) - Math.min(...c.slice(1).map((v,i)=>v-c[i]))<Math.min(.12,.5/n));return c;}
 function render(){
   svg.innerHTML='';
   if(mode==='shape'||mode==='quiz'){
-    const n=mode==='quiz'?quiz.n:parts,paths=mode==='quiz'?quiz.paths:pieces(kind,parts,false);
-    paths.forEach((d,i)=>{const p=el('path',{d,fill:shaded.has(i)&&mode==='shape'?SH:'#fff',stroke:'#1f2937','stroke-width':3,style:mode==='shape'?'cursor:pointer':''},svg);
-      if(mode==='shape')p.addEventListener('pointerdown',()=>{shaded.has(i)?shaded.delete(i):shaded.add(i);update();});});
+    const n=mode==='quiz'?quiz.n:parts,P=mode==='quiz'?quiz.paths:pieces(parts,false);
+    if(showWhole||mode==='quiz'){el('rect',{x:SX,y:50,width:SW,height:60,rx:4,fill:'#dbeafe',stroke:'#1f2937','stroke-width':3},svg);txt(svg,SX+SW/2,90,'1 whole',26,'#1e3a8a','800');}
+    P.forEach((q,i)=>{const on=shaded.has(i)&&mode==='shape',r=el('rect',{x:q.x,y:SY,width:q.w,height:SHH,fill:on?SH:'#fff',stroke:'#1f2937','stroke-width':3,style:mode==='shape'?'cursor:pointer':''},svg);
+      if(mode==='shape'){r.addEventListener('pointerdown',()=>{shaded.has(i)?shaded.delete(i):shaded.add(i);update();});
+        if(labels){const fs=n>=8?24:30;txt(svg,q.x+q.w/2,SY+SHH/2-6,'1',fs,on?'#fff':'#334155','800');el('line',{x1:q.x+q.w/2-fs*.5,x2:q.x+q.w/2+fs*.5,y1:SY+SHH/2+2,y2:SY+SHH/2+2,stroke:on?'#fff':'#334155','stroke-width':2.5,'pointer-events':'none'},svg);txt(svg,q.x+q.w/2,SY+SHH/2+fs+4,String(n),fs,on?'#fff':'#334155','800');}}});
     if(mode==='shape'){const k=shaded.size;
-      frac(740,150,k,parts,54,SH);
-      txt(svg,740,300,`${k} ${k===1?ONE[parts]:NAMES[parts]}`,24,'#334155','700');
-      txt(svg,740,334,`shaded`,20,'#64748b');
-      if(k&&k<parts)txt(svg,740,390,`${parts-k}/${parts} not shaded`,18,'#64748b');}
+      // bracket under the strip showing the whole length
+      el('path',{d:`M${SX} ${SY+SHH+12}v10H${SX+SW}v-10`,fill:'none',stroke:'#94a3b8','stroke-width':2},svg);
+      frac(250,345,k,parts,46,SH);
+      const t=txt(svg,320,350,`${k} ${k===1?ONE[parts]:NAMES[parts]} shaded`,26,'#334155','700');t.setAttribute('text-anchor','start');
+      if(k&&k<parts){const t2=txt(svg,320,392,`${parts-k}/${parts} not shaded`,20,'#64748b');t2.setAttribute('text-anchor','start');}
+      if(k===parts){const t3=txt(svg,320,392,`${parts}/${parts} is the same as 1 whole!`,20,'#16a34a','700');t3.setAttribute('text-anchor','start');}}
   } else {
     // collection: N counters shared into G groups
     const per=Math.floor(N/G),rem=N-per*G,gw=Math.min(190,800/G),rows=Math.ceil(per/3);
@@ -80,23 +76,24 @@ function render(){
 }
 function update(){
   let s='';
-  if(mode==='shape'){const k=shaded.size;s=`This ${kind==='rect'?'rectangle':kind} is cut into <b>${parts} equal parts</b>, called ${NAMES[parts]}.`+(k?` <b>${k}/${parts}</b> is shaded.`:'');}
+  if(mode==='shape'){const k=shaded.size;s=`This strip is cut into <b>${parts} equal parts</b>. Each part is the same length. They are called <b>${NAMES[parts]}</b>.`+(k?` <b>${k}/${parts}</b> is shaded.`:'');}
   if(mode==='coll'){const per=Math.floor(N/G),k=gShaded.size;s=N%G?`${N} counters can't be shared equally into ${G} groups.`:`${N} shared into ${G} equal groups gives <b>${per}</b> in each group. <b>1/${G} of ${N} = ${per}</b>`+(k>1?` &nbsp; ${k}/${G} of ${N} = <b>${k*per}</b>`:'');}
   if(s)$('say').innerHTML=s;render();
 }
 function newQuiz(){
-  const k=['circle','square','rect'][Math.floor(Math.random()*3)],n=[2,3,4][Math.floor(Math.random()*3)],eq=Math.random()<.5;
-  quiz={n,eq,paths:pieces(k,n,!eq)};$('say').innerHTML=`Is this shape cut into <b>${NAMES[n]}</b>?`;render();
+  const n=[2,4,8,3][Math.floor(Math.random()*4)],eq=Math.random()<.5;
+  quiz={n,eq,paths:pieces(n,!eq)};$('say').innerHTML=`Is this strip cut into <b>${NAMES[n]}</b>?`;render();
 }
 function answer(yes){
-  if(yes===quiz.eq){$('say').innerHTML=quiz.eq?`✓ Yes! All ${quiz.n} parts are the same size, so they are ${NAMES[quiz.n]}.`:`✓ Right! The parts are different sizes, so they are <b>not</b> ${NAMES[quiz.n]}.`;setTimeout(newQuiz,2200);}
-  else $('say').innerHTML='Look again. Are all the parts exactly the same size?';
+  if(yes===quiz.eq){$('say').innerHTML=quiz.eq?`✓ Yes! All ${quiz.n} parts are the same length, so they are ${NAMES[quiz.n]}.`:`✓ Right! The parts are different lengths, so they are <b>not</b> ${NAMES[quiz.n]}.`;setTimeout(newQuiz,2200);}
+  else $('say').innerHTML='Look again. Are all the parts exactly the same length? Compare them with the whole strip.';
 }
 $('yes').onclick=()=>answer(true);$('no').onclick=()=>answer(false);
 document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));
   $('shapeBar').style.display=mode==='shape'?'flex':'none';$('collBar').style.display=mode==='coll'?'flex':'none';$('yn').style.display=mode==='quiz'?'flex':'none';
   if(mode==='quiz')newQuiz();else update();});
-document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{kind=b.dataset.k;document.querySelectorAll('[data-k]').forEach(x=>x.classList.toggle('on',x===b));shaded.clear();update();});
+$('wholeBtn').onclick=e=>{showWhole=!showWhole;e.target.classList.toggle('on',showWhole);update();};
+$('labBtn').onclick=e=>{labels=!labels;e.target.classList.toggle('on',labels);update();};
 document.querySelectorAll('.p').forEach(b=>b.onclick=()=>{parts=+b.dataset.p;document.querySelectorAll('.p').forEach(x=>x.classList.toggle('on',x===b));shaded.clear();update();});
 document.querySelectorAll('.g').forEach(b=>b.onclick=()=>{G=+b.dataset.g;document.querySelectorAll('.g').forEach(x=>x.classList.toggle('on',x===b));gShaded.clear();update();});
 $('nm').onclick=()=>{N=Math.max(2,N-1);$('nv').textContent=N;gShaded.clear();update();};
