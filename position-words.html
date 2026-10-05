@@ -53,7 +53,7 @@ function render(){
   el('rect',{x:700,y:310,width:140,height:120,fill:'#d97706',stroke:'#78350f','stroke-width':3},svg);el('polygon',{points:'700,310 680,280 840,280 860,310',fill:'#f59e0b',stroke:'#78350f','stroke-width':3},svg);
   txt(svg,430,460,'table',15,'#fff','700');txt(svg,770,460,'box',15,'#fff','700');
   const inBox=ZONES[3].t(...teddy);
-  const g=el('g',{style:'cursor:grab'},svg);txt(g,teddy[0],teddy[1]+22,'🧸',64);
+  const g=el('g',{style:'cursor:grab'},svg);el('rect',{x:teddy[0]-38,y:teddy[1]-38,width:76,height:76,fill:'transparent'},g);txt(g,teddy[0],teddy[1]+22,'🧸',64);
   if(inBox)el('rect',{x:700,y:360,width:140,height:70,fill:'#d97706',stroke:'#78350f','stroke-width':3},svg);
   g.addEventListener('pointerdown',e=>{drag=true;svg.setPointerCapture(e.pointerId);e.preventDefault();});
 }

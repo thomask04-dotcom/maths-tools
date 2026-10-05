@@ -76,12 +76,13 @@ function render(){
   if(mode==='mass'){
     el('rect',{x:0,y:465,width:1000,height:85,fill:'#f1f5f9'},svg);
     // shelf of objects
-    OBJ.forEach((o,i)=>{const x=60+i*120,y=508,gg=el('g',{style:'cursor:grab'},svg);drawObj(gg,o,x,y-(o.k==='cube'?14:o.s*0.35),0.7);txt(svg,x,540,o.k==='cube'?'cube':o.name,13,'#475569');gg.addEventListener('pointerdown',e=>{drag={o,x:0,y:0};svg.setPointerCapture(e.pointerId);e.preventDefault();});});
+    OBJ.forEach((o,i)=>{const x=60+i*120,y=508,gg=el('g',{style:'cursor:grab'},svg);el('rect',{x:x-55,y:468,width:110,height:80,fill:'transparent'},gg);drawObj(gg,o,x,y-(o.k==='cube'?14:o.s*0.35),0.7);txt(svg,x,540,o.k==='cube'?'cube':o.name,13,'#475569');gg.addEventListener('pointerdown',e=>{drag={o,x:0,y:0};svg.setPointerCapture(e.pointerId);e.preventDefault();});});
     if(drag&&drag.x)drawObj(svg,drag.o,drag.x,drag.y);
   }
 }
 function drawObj(p,o,x,y,sc){sc=sc||1;
   if(o.k==='cube'){el('rect',{x:x-14*sc,y:y-14*sc+14,width:28*sc,height:28*sc,rx:3,fill:'#22c55e',stroke:'#14532d','stroke-width':2},p);return;}
+  const r=o.s*sc*0.62;el('rect',{x:x-r,y:y-r,width:2*r,height:2*r,fill:'transparent'},p);
   txt(p,x,y+o.s*0.35*sc,o.e,o.s*sc);
 }
 function settle(){
