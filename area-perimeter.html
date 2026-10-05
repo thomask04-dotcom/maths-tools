@@ -16,12 +16,13 @@ svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-web
 .hint{font-size:13px;color:#6b7280;padding:6px 10px}
 </style></head><body>
 <div class="bar"><span class="title">Area & Perimeter</span>
-<button data-t="build" class="on">Build shapes</button><button data-t="cover">Cover a rectangle</button><button data-t="L">L-shapes</button><button data-t="para">Parallelograms & triangles</button>
+<button data-t="cmp" class="on">Compare areas</button><button data-t="units">Informal units</button><button data-t="build">Build shapes</button><button data-t="cover">Cover a rectangle</button><button data-t="L">L-shapes</button><button data-t="para">Parallelograms & triangles</button>
 </div>
 <div class="bar" id="ctl"></div>
 <div id="say"></div>
 <svg id="svg" viewBox="0 0 1000 560"></svg>
-<div class="hint">Area is how many square units cover the surface (no gaps, no overlaps). Perimeter is the distance around the outside. Shapes with the same perimeter can have different areas!</div>
+<div id="rec" style="padding:4px 14px 10px;font-size:17px"></div>
+<div class="hint">Compare areas: predict which surface is larger, then check by tracing a paper copy or by covering both with the same unit. Informal units: cover a surface in rows or columns with no gaps or overlaps, then record the number and type of unit. Area is how many square units cover the surface (no gaps, no overlaps). Perimeter is the distance around the outside. Shapes with the same perimeter can have different areas!</div>
 <script>
 const NS='http://www.w3.org/2000/svg';
 function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
@@ -29,17 +30,40 @@ function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fi
 function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
 const $=id=>document.getElementById(id);
 const svg=$('svg'),U=40,GX=16,GY=12,X0=(1000-GX*U)/2,Y0=30;
-let tab='build',cells=new Set(),paintMode=null,goal=null,cov={w:7,h:4,unit:'sq',grid:'none',placed:new Set(),rows:false},Lst={how:null},par={b:6,h:4,s:2,cut:false,tri:false};
+let tab='cmp',cells=new Set(),paintMode=null,goal=null,cov={w:7,h:4,unit:'sq',grid:'none',placed:new Set(),rows:false},Lst={how:null},par={b:6,h:4,s:2,cut:false,tri:false};
 const key=(x,y)=>x+','+y;
 function perim(set){let p=0;for(const k of set){const [x,y]=k.split(',').map(Number);for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])if(!set.has(key(x+dx,y+dy)))p++;}return p;}
 function grid(w,h,x0,y0,col){for(let i=0;i<=w;i++)el('line',{x1:x0+i*U,x2:x0+i*U,y1:y0,y2:y0+h*U,stroke:col||'#e2e8f0','stroke-width':1},svg);for(let j=0;j<=h;j++)el('line',{x1:x0,x2:x0+w*U,y1:y0+j*U,y2:y0+j*U,stroke:col||'#e2e8f0','stroke-width':1},svg);}
 function ctl(){
   const C=$('ctl');let h='';
+  if(tab==='cmp')h='<button id="cNew">🎲 New surfaces</button><span>I predict the larger area is:</span><button data-pr="A" class="'+(cmp.pred==='A'?'on':'')+'">A</button><button data-pr="B" class="'+(cmp.pred==='B'?'on':'')+'">B</button><span>Check:</span><button id="cTr">✏ Trace A onto paper</button><button id="cCA">Cover A with sticky notes</button><button id="cCB">Cover B with sticky notes</button><button id="cClr">Clear</button>';
+  if(tab==='units')h='<span>Surface:</span>'+Object.keys(SURF).map(k=>`<button data-sf="${k}" class="${un.s===k?'on':''}">${SURF[k].n}</button>`).join('')+'<span>Unit:</span>'+Object.keys(UNITS).map(k=>`<button data-un="${k}" class="${un.u===k?'on':''}">${UNITS[k].n}</button>`).join('')+'<span style="flex-basis:100%;height:0"></span><label>My estimate: <input type="number" id="est" min="0" max="999" value="'+un.est+'"></label><button id="uRow">Fill a row</button><button id="uCol">Fill a column</button><button id="uAll">Fill it all</button><button id="uMessy">Messy cover</button><button id="uRr">🔀 Move the units</button><button id="uRec">📝 Record</button><button id="uClr">Clear</button>';
+
   if(tab==='build')h='<button id="clr">Clear</button><button id="gP">🎯 Perimeter challenge</button><button id="gA">🎯 Area challenge</button><span id="gtxt" style="font-weight:600"></span>';
   if(tab==='cover')h='<label>Rectangle <input type="number" id="cw" min="1" max="15" value="'+cov.w+'"> by <input type="number" id="ch" min="1" max="10" value="'+cov.h+'"></label><span>Cover with:</span><button data-u="sq" class="'+(cov.unit==='sq'?'on':'')+'">squares</button><button data-u="ci" class="'+(cov.unit==='ci'?'on':'')+'">circles</button><button id="rowBtn">Fill a row</button><button id="fillBtn">Fill it all</button><button id="cclr">Clear</button><span>Grid:</span><select id="gsel"><option value="none">no grid</option><option value="top">grid on top</option><option value="behind">grid behind</option></select>';
   if(tab==='L')h='<span>Find the area by:</span><button data-l="across">cutting across</button><button data-l="down">cutting down</button><button data-l="move">moving a piece</button><button data-l="sub">big rectangle take away</button><button data-l="none">just the shape</button><button id="Lnew">🎲 New L-shape</button>';
   if(tab==='para')h='<label>Base <input type="number" id="pb" min="2" max="12" value="'+par.b+'"></label><label>Height <input type="number" id="ph" min="1" max="8" value="'+par.h+'"></label><button id="cutBtn">✂ Cut and move the triangle</button><button id="triBtn">Split into 2 triangles</button>';
   C.innerHTML=h;
+  if(tab==='cmp'){const D=cmpDims();
+    $('cNew').onclick=()=>{stopAll();let i;do{i=Math.floor(Math.random()*PAIRS.length);}while(i===cmp.i);cmp={i,swap:Math.random()<.5,pred:null,cA:0,cB:0,paper:null,drag:null};ctl();render();};
+    C.querySelectorAll('[data-pr]').forEach(b=>b.onclick=()=>{cmp.pred=b.dataset.pr;C.querySelectorAll('[data-pr]').forEach(x=>x.classList.toggle('on',x===b));render();});
+    $('cTr').onclick=()=>{cmp.paper={x:AX,y:CY0};render();};
+    $('cCA').onclick=()=>{cmp.paper=null;coverAnim('cA',D.a[0]*D.a[1]);render();};$('cCB').onclick=()=>{cmp.paper=null;coverAnim('cB',D.b[0]*D.b[1]);render();};
+    $('cClr').onclick=()=>{stopAll();cmp.cA=cmp.cB=0;cmp.paper=null;render();};}
+  if(tab==='units'){const G=()=>uGrid(),fresh=()=>{stopAll();un.placed=new Set();un.order=[];un.messy=null;un.rr=0;};
+    C.querySelectorAll('[data-sf]').forEach(b=>b.onclick=()=>{un.s=b.dataset.sf;fresh();ctl();render();});
+    C.querySelectorAll('[data-un]').forEach(b=>b.onclick=()=>{un.u=b.dataset.un;fresh();ctl();render();});
+    $('est').oninput=e=>{un.est=e.target.value;};$('est').onchange=()=>render();
+    const prep=()=>{if(un.messy||un.rr){un.messy=null;un.rr=0;un.placed=new Set();un.order=[];}};
+    $('uRow').onclick=()=>{prep();const {cols,rows}=G();for(let r=0;r<rows;r++){let full=true;for(let c=0;c<cols;c++)if(!un.placed.has(key(c,r)))full=false;if(!full){for(let c=0;c<cols;c++)uAdd(key(c,r));break;}}render();};
+    $('uCol').onclick=()=>{prep();const {cols,rows}=G();for(let c=0;c<cols;c++){let full=true;for(let r=0;r<rows;r++)if(!un.placed.has(key(c,r)))full=false;if(!full){for(let r=0;r<rows;r++)uAdd(key(c,r));break;}}render();};
+    $('uAll').onclick=()=>{prep();stopAll();const {cols,rows}=G();let r=0;timers.fill=setInterval(()=>{if(r>=rows){clearInterval(timers.fill);return;}for(let c=0;c<cols;c++)uAdd(key(c,r));r++;render();},260);};
+    $('uMessy').onclick=()=>{stopAll();un.rr=0;if(un.messy){un.messy=null;render();return;}const {u,cols,rows}=G(),M=[];for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){if(Math.random()<.15)continue;M.push({x:UX+c*u.w+(Math.random()-.5)*u.w*.7,y:UY+r*u.h+(Math.random()-.5)*u.h*.7});}un.messy=M;render();};
+    $('uRr').onclick=()=>{const C2=uCount();if(un.messy||UNITS[un.u].round||!C2.done){$('say').innerHTML=UNITS[un.u].round?'Counters leave gaps, so try a different unit first.':'Cover the whole surface first (no gaps, no overlaps), then move the units.';return;}
+      stopAll();const to=un.rr>0?0:1,from=un.rr,t0=performance.now();timers.rr=setInterval(()=>{const t=Math.min(1,(performance.now()-t0)/900);un.rr=from+(to-from)*t;if(t>=1)clearInterval(timers.rr);render();},16);};
+    $('uRec').onclick=()=>{const {S,u}=G(),C2=uCount();if(un.messy||u.round||!C2.done){$('say').innerHTML=u.round?'Counters leave gaps, so we can\'t use them to record an area. Try another unit.':'Cover the whole surface first, with no gaps and no overlaps. Then record it.';return;}
+      const n=C2.exact?C2.full:C2.about,v=C2.exact?`${n} ${u.n}`:`about ${n} ${u.n} (${C2.full} whole and ${C2.part} parts)`;un.rec=un.rec.filter(r=>!(r.s===S.n&&r.u===u.n));un.rec.push({s:S.n,u:u.n,n,v,size:u.w*u.h});renderRec();};
+    $('uClr').onclick=()=>{fresh();render();};}
   if(tab==='build'){$('clr').onclick=()=>{cells.clear();render();};$('gP').onclick=()=>{goal={t:'P',v:[12,14,16,18,20][Math.floor(Math.random()*5)]};cells.clear();render();};$('gA').onclick=()=>{goal={t:'A',v:[6,8,10,12,16][Math.floor(Math.random()*5)]};cells.clear();render();};}
   if(tab==='cover'){const up=()=>{cov.w=Math.max(1,Math.min(15,+$('cw').value||1));cov.h=Math.max(1,Math.min(10,+$('ch').value||1));cov.placed.clear();render();};$('cw').oninput=up;$('ch').oninput=up;
     C.querySelectorAll('[data-u]').forEach(b=>b.onclick=()=>{cov.unit=b.dataset.u;cov.placed.clear();ctl();render();});
@@ -51,6 +75,8 @@ function ctl(){
 }
 function render(){
   svg.innerHTML='';let s='';
+  if(tab==='cmp')s=renderCmp();
+  if(tab==='units'){renderUnits();s=unSay();}
   if(tab==='build'){
     svg.setAttribute('viewBox','0 0 1000 540');grid(GX,GY,X0,Y0);
     for(const k of cells){const [x,y]=k.split(',').map(Number);el('rect',{x:X0+x*U,y:Y0+y*U,width:U,height:U,fill:'#93c5fd',stroke:'#1e40af','stroke-width':1},svg);}
@@ -119,6 +145,90 @@ function render(){
 }
 svg.addEventListener('pointermove',e=>{if(paintMode!=='shear')return;const p=pt(svg,e),x0=(1000-(par.b+8)*U)/2+U*2;par.s=Math.max(0,Math.min(4,Math.round((p.x-x0)/U-par.b)));render();});
 svg.addEventListener('pointerup',()=>{paintMode=null;});
-document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b));ctl();render();});
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{stopAll();tab=b.dataset.t;renderRec();document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b));ctl();render();});
+// ---------- Stage 1: compare areas & uniform informal units ----------
+let timers={};function stopAll(){for(const k in timers){clearInterval(timers[k]);}timers={};}
+const T=44,CY0=80,AX=40,BX=520;
+const PAIRS=[{a:[6,4],b:[5,5],na:'Table top',nb:'Rug'},{a:[7,3],b:[5,4],na:'Whiteboard',nb:'Window'},{a:[8,3],b:[5,5],na:'Garden bed',nb:'Sandpit'},{a:[6,3],b:[4,4],na:'Door',nb:'Noticeboard'},{a:[7,2],b:[4,4],na:'Bench seat',nb:'Floor mat'},{a:[9,2],b:[5,4],na:'Shelf',nb:'Desk'},{a:[3,6],b:[4,4],na:'Cupboard door',nb:'Painting'}];
+let cmp={i:0,swap:false,pred:null,cA:0,cB:0,paper:null,drag:null};
+function cmpDims(){const P=PAIRS[cmp.i];return cmp.swap?{a:P.b,b:P.a,na:P.nb,nb:P.na}:P;}
+function cmpSay(){const D=cmpDims(),A=D.a[0]*D.a[1],B=D.b[0]*D.b[1];
+  if(cmp.cA===A&&cmp.cB===B){const big=A>B?'A':'B',bn=A>B?D.na:D.nb,d=Math.abs(A-B);
+    let s=`${D.na} = <b>${A} sticky notes</b>. ${D.nb} = <b>${B} sticky notes</b>. The <b>${bn.toLowerCase()} (${big})</b> has the larger area, by ${d} sticky note${d===1?'':'s'}.`;
+    if(cmp.pred)s+=cmp.pred===big?' ✓ Your prediction was right!':' Your prediction was not quite right. Shapes can trick our eyes!';return s;}
+  if(cmp.paper&&cmp.paper.x===BX&&cmp.paper.y===CY0){const [aw,ah]=D.a,[bw,bh]=D.b,out=aw>bw||ah>bh,short=aw<bw||ah<bh;
+    if(out&&short)return 'The paper copy of A sticks out in some places, but does not cover all of B. <b>We can\'t tell</b> which is larger this way. Cover both with the same unit to check!';
+    if(out)return 'The paper copy of A covers all of B, with some left over. So <b>A</b> has the larger area.';
+    if(short)return 'The paper copy of A fits inside B, and part of B is not covered. So <b>B</b> has the larger area.';}
+  if(cmp.paper)return 'Drag the paper copy of A onto B. We can\'t move the real surfaces, but we can move a copy!';
+  if(cmp.cA||cmp.cB)return `Counting… ${D.na}: <b>${cmp.cA}</b> &nbsp; ${D.nb}: <b>${cmp.cB}</b>. Use the same unit for both, with no gaps and no overlaps.`;
+  if(cmp.pred)return `You predict <b>${cmp.pred}</b> has the larger area. Now check: trace A onto paper, or cover both with sticky notes.`;
+  return `The ${D.na.toLowerCase()} and the ${D.nb.toLowerCase()} can't be moved, so we can't put one on top of the other. Which has the larger area? <b>Make a prediction.</b>`;}
+function renderCmp(){
+  svg.setAttribute('viewBox','0 0 1000 420');const D=cmpDims();
+  [{n:D.na,d:D.a,x:AX,c:'#e7c9a0',s:'#8b5e34',k:'cA',L:'A'},{n:D.nb,d:D.b,x:BX,c:'#ddd6fe',s:'#6d28d9',k:'cB',L:'B'}].forEach(o=>{const [w,h]=o.d;
+    txt(svg,o.x+w*T/2,56,`${o.L}: ${o.n} 🔒`,20,o.s,'800');
+    el('rect',{x:o.x,y:CY0,width:w*T,height:h*T,fill:o.c,stroke:o.s,'stroke-width':4,rx:3},svg);
+    const n=cmp[o.k];for(let i=0;i<n;i++){const x=o.x+(i%w)*T,y=CY0+Math.floor(i/w)*T;el('rect',{x:x+2,y:y+2,width:T-4,height:T-4,fill:'#fde047',stroke:'#a16207','stroke-width':1.5},svg);txt(svg,x+T/2,y+T/2+6,String(i+1),16,'#713f12','700');}
+    if(n===w*h)txt(svg,o.x+w*T/2,CY0+h*T+32,`${n} sticky notes`,22,o.s,'800');});
+  if(cmp.paper){const [w,h]=D.a,p=cmp.paper,g=el('g',{style:'cursor:grab'},svg);
+    el('rect',{x:p.x,y:p.y,width:w*T,height:h*T,fill:'rgba(255,255,255,.55)',stroke:'#0f172a','stroke-width':3,'stroke-dasharray':'10 6'},g);
+    txt(g,p.x+w*T/2,p.y+h*T/2+6,'paper copy of A',18,'#0f172a','700');
+    g.addEventListener('pointerdown',e=>{const q=pt(svg,e);cmp.drag={dx:q.x-p.x,dy:q.y-p.y};svg.setPointerCapture(e.pointerId);e.preventDefault();});}
+  return cmpSay();}
+svg.addEventListener('pointermove',e=>{if(!cmp.drag)return;const q=pt(svg,e);cmp.paper={x:q.x-cmp.drag.dx,y:q.y-cmp.drag.dy};render();});
+svg.addEventListener('pointerup',()=>{if(!cmp.drag)return;cmp.drag=null;const p=cmp.paper;if(Math.abs(p.x-BX)<60&&Math.abs(p.y-CY0)<60)cmp.paper={x:BX,y:CY0};render();});
+function coverAnim(k,total){clearInterval(timers[k]);if(cmp[k]>=total)return;timers[k]=setInterval(()=>{cmp[k]++;if(cmp[k]>=total)clearInterval(timers[k]);render();},90);}
+
+const SURF={desk:{n:'desk',w:420,h:300,c:'#e7c9a0',s:'#8b5e34'},book:{n:'book cover',w:240,h:360,c:'#bbf7d0',s:'#15803d'},mat:{n:'placemat',w:360,h:240,c:'#fbcfe8',s:'#be185d'}};
+const UNITS={small:{n:'small squares',one:'small square',w:30,h:30,f:'#93c5fd',st:'#1e40af',tip:'Small squares fit well, but there are lots to count!'},
+  sticky:{n:'sticky notes',one:'sticky note',w:60,h:60,f:'#fde047',st:'#a16207',tip:''},
+  cards:{n:'cards',one:'card',w:60,h:90,f:'#fff',st:'#dc2626',tip:'Cards are rectangles. Will they fit exactly?'},
+  big:{n:'big tiles',one:'big tile',w:90,h:90,f:'#86efac',st:'#166534',tip:'Big tiles are quick to count. Will they fit exactly?'},
+  counters:{n:'counters',one:'counter',w:60,h:60,f:'#fb923c',st:'#9a3412',round:true,tip:'Will round counters cover the surface with no gaps?'}};
+const UX=40,UY=50;
+let un={s:'desk',u:'sticky',placed:new Set(),order:[],messy:null,est:'',rec:[],rr:0};
+function uGrid(){const S=SURF[un.s],u=UNITS[un.u];return {S,u,cols:Math.ceil(S.w/u.w-1e-9),rows:Math.ceil(S.h/u.h-1e-9),fc:Math.floor(S.w/u.w+1e-9),fr:Math.floor(S.h/u.h+1e-9)};}
+function uCount(){const {S,u,cols,rows,fc,fr}=uGrid();let full=0,part=0;for(const k of un.placed){const [c,r]=k.split(',').map(Number);(c<fc&&r<fr)?full++:part++;}
+  return {full,part,done:un.placed.size===cols*rows,exact:fc===cols&&fr===rows,about:Math.round(S.w*S.h/(u.w*u.h))};}
+function uAdd(k){if(!un.placed.has(k)){un.placed.add(k);un.order.push(k);}}
+function drawUnit(x,y,u,clip,label,op){const a=clip?{'clip-path':'url(#sclip)'}:{};
+  if(u.round)el('circle',Object.assign({cx:x+u.w/2,cy:y+u.h/2,r:u.w/2-2,fill:u.f,stroke:u.st,'stroke-width':2,opacity:op||1},a),svg);
+  else{el('rect',Object.assign({x:x+1.5,y:y+1.5,width:u.w-3,height:u.h-3,rx:u===UNITS.cards?6:2,fill:u.f,stroke:u.st,'stroke-width':2,opacity:op||1},a),svg);
+    if(u===UNITS.cards&&!label)txt(svg,x+u.w/2,y+u.h/2+8,'♥',22,'#dc2626').setAttribute('clip-path','url(#sclip)');}
+  if(label)txt(svg,x+u.w/2,y+u.h/2+(u.w<40?5:7),label,u.w<40?(label.length>2?10:13):18,'#1f2937','700');}
+function renderUnits(){
+  const {S,u,cols,rows,fc,fr}=uGrid(),C=uCount();svg.setAttribute('viewBox','0 0 1000 470');
+  const defs=el('defs',{},svg),cp=el('clipPath',{id:'sclip'},defs);el('rect',{x:UX,y:UY,width:S.w,height:S.h},cp);
+  const pat=el('pattern',{id:'hatch',width:10,height:10,patternUnits:'userSpaceOnUse',patternTransform:'rotate(45)'},defs);el('line',{x1:0,y1:0,x2:0,y2:10,stroke:'#f97316','stroke-width':5},pat);
+  txt(svg,UX+S.w/2,UY-16,`The ${S.n}`,20,S.s,'800');
+  el('rect',{x:UX,y:UY,width:S.w,height:S.h,fill:S.c,stroke:S.s,'stroke-width':4},svg);
+  if(un.messy){un.messy.forEach(p=>drawUnit(p.x,p.y,u,true,'',.82));el('rect',{x:UX,y:UY,width:S.w,height:S.h,fill:'none',stroke:S.s,'stroke-width':4},svg);return;}
+  const cols2=Math.max(1,Math.floor(440/u.w)===fc?Math.floor(440/u.w)-1:Math.floor(440/u.w));let j=0;
+  un.order.forEach(k=>{const [c,r]=k.split(',').map(Number),x=UX+c*u.w,y=UY+r*u.h;
+    if(c<fc&&r<fr){j++;const tx=500+((j-1)%cols2)*u.w,ty=UY+Math.floor((j-1)/cols2)*u.h,e=un.rr*un.rr*(3-2*un.rr);drawUnit(x+(tx-x)*e,y+(ty-y)*e,u,false,String(j));}
+    else if(!un.rr||un.rr<1){drawUnit(x,y,u,true,'',1-un.rr);el('rect',{x:x+1.5,y:y+1.5,width:u.w-3,height:u.h-3,fill:'url(#hatch)',opacity:.55*(1-un.rr),'clip-path':'url(#sclip)','pointer-events':'none'},svg);
+      el('rect',{x:x+1.5,y:y+1.5,width:u.w-3,height:u.h-3,fill:'none',stroke:'#f97316','stroke-width':2,'stroke-dasharray':'5 4',opacity:1-un.rr,'pointer-events':'none'},svg);}});
+  el('rect',{x:UX,y:UY,width:S.w,height:S.h,fill:'none',stroke:S.s,'stroke-width':4,'pointer-events':'none'},svg);
+  if(un.rr>0)txt(svg,500+cols2*u.w/2,UY-16,`The same ${C.full} ${u.n}, moved`,20,'#334155','800');
+  if(!un.rr){const hit=el('rect',{x:UX,y:UY,width:S.w,height:S.h,fill:'transparent',style:'cursor:pointer'},svg);
+    hit.addEventListener('pointerdown',e=>{const p=pt(svg,e),c=Math.floor((p.x-UX)/u.w),r=Math.floor((p.y-UY)/u.h);if(c<0||r<0||c>=cols||r>=rows)return;const k=key(c,r);
+      if(un.placed.has(k)){un.placed.delete(k);un.order=un.order.filter(x=>x!==k);}else uAdd(k);render();});}}
+function unSay(){const {S,u,fc,fr}=uGrid(),C=uCount();
+  if(un.messy)return `Messy! There are <b>gaps</b> (you can see the ${S.n} through them) and <b>overlaps</b> (units on top of each other). Counting these ${un.messy.length} ${u.n} would not be a fair measure. Units need <b>no gaps and no overlaps</b>.`;
+  if(un.rr)return `We moved the same <b>${C.full} ${u.n}</b> into a different shape. There are still ${C.full}, so the area is still <b>${C.full} ${u.n}</b>. Moving the units around doesn't change the area.`;
+  if(!un.placed.size)return `How many ${u.n} will cover the ${S.n}? Type your <b>estimate</b>, then cover it in rows or columns, with no gaps and no overlaps. ${u.tip}`;
+  if(u.round)return `${un.placed.size} counters. `+(C.done?'Look at all the <b>gaps</b> between the counters! Round units leave gaps, so they are <b>not a good unit</b> for measuring area.':'Keep going… what do you notice between the counters?');
+  let s;
+  if(!C.done)s=`${C.full} ${C.full===1?u.one:u.n} so far`+(C.part?(C.part===1?`, and 1 part of a ${u.one}`:`, and ${C.part} parts of ${u.n}`):"")+'. Keep going: no gaps, no overlaps.';
+  else if(C.exact)s=`The ${S.n} is covered by <b>${C.full} ${u.n}</b>: ${fr} rows of ${fc}, or ${fc} columns of ${fr}. The area of the ${S.n} is <b>${C.full} ${u.n}</b>.`;
+  else s=`<b>${C.full} whole ${u.n}</b> and <b>${C.part} parts</b> of ${u.n} (striped) at the edge. The area is more than ${C.full} ${u.n}. If we put the parts together, it is about <b>${C.about} ${u.n}</b>.`;
+  if(C.done&&un.est!==''){const e=+un.est,a=C.exact?C.full:C.about,d=Math.abs(e-a);s+=` You estimated <b>${e}</b>. `+(d===0?'Spot on! 🎉':d<=Math.max(2,Math.round(a*.15))?'That was close!':`Your estimate was ${e<a?'less':'more'} than the measure.`);}
+  return s;}
+function renderRec(){const R=$('rec');if(tab!=='units'||!un.rec.length){R.innerHTML='';return;}
+  let h='<b>Our recording</b><table style="border-collapse:collapse;margin-top:4px">'+un.rec.map(r=>`<tr><td style="padding:4px 12px;border:1px solid #e5e7eb">The ${r.s}</td><td style="padding:4px 12px;border:1px solid #e5e7eb">${r.v}</td></tr>`).join('')+'</table>';
+  const by={};un.rec.forEach(r=>(by[r.s]=by[r.s]||[]).push(r));
+  for(const s in by)if(by[s].length>1){const L=by[s].slice().sort((a,b)=>a.size-b.size);h+=`<div style="margin-top:6px">📏 The ${s}: `+L.map(r=>`${r.n} ${r.u}`).join(', ')+`. <b>The bigger the unit, the fewer units we need. The smaller the unit, the more units we need.</b></div>`;}
+  R.innerHTML=h;}
 ctl();render();
 </script></body></html>
