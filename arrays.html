@@ -11,6 +11,9 @@ button:hover{border-color:#94a3b8}
 button.on{background:#2563eb;border-color:#2563eb;color:#fff}
 .v{font-size:22px;font-weight:800;min-width:34px;text-align:center}
 #eq{font-size:22px;padding:8px 14px;line-height:1.7;min-height:44px}
+#opts{display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 8px}
+#opts button{font-size:22px;font-weight:800;min-width:56px}
+.rw{color:#b45309;font-weight:700}.cl{color:#0e7490;font-weight:700}
 svg{display:block;width:100%;max-width:880px;margin:0 auto;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
 .hint{font-size:13px;color:#6b7280;padding:6px 10px}
 </style></head><body>
@@ -23,13 +26,18 @@ svg{display:block;width:100%;max-width:880px;margin:0 auto;height:auto;touch-act
 <span>Left over:</span><button id="em">−</button><span class="v" id="ev">0</span><button id="ep">+</button>
 </div>
 <div class="bar">
-<span>Show:</span><button data-s="rows" class="on">Rows of</button><button data-s="add" class="on">Repeated addition</button><button data-s="mult">Multiplication</button><button data-s="div">Division</button>
+<span>Look at:</span><button data-look="rows">▤ Rows</button><button data-look="cols">▥ Columns</button>
+<button id="quizBtn">❓ Rows and columns</button>
+</div>
+<div class="bar">
+<span>Show:</span><button data-s="rows" class="on">Rows</button><button data-s="cols" class="on">Columns</button><button data-s="add" class="on">Repeated addition</button><button data-s="mult">Multiplication</button><button data-s="div">Division</button>
 <button id="totBtn" class="on">Show total</button>
 <button id="shapeBtn">Squares</button>
 </div>
 <div id="eq"></div>
+<div id="opts"></div>
 <svg id="svg"></svg>
-<div class="hint">Use − and + to change the rows and columns. "Turn it" swaps rows and columns, and the total stays the same. "Split" adds a line you can drag to break the array into two smaller arrays.</div>
+<div class="hint">Rows go across (↔) and columns go up and down (↕). Use "Look at" to circle each row or column, and tap one to talk about it. Use − and + to change the rows and columns. "Turn it" swaps rows and columns, and the total stays the same. "Split" adds a line you can drag to break the array into two smaller arrays.</div>
 <script>
 const NS='http://www.w3.org/2000/svg';
 function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
@@ -37,22 +45,28 @@ function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fi
 function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
 const $=id=>document.getElementById(id);
 const svg=$('svg');
-let cover=false,extra=0,R=3,C=4,split=0,squares=false,showT=true,shows=new Set(['rows','add']),drag=false;
+let look=null,sel=-1,quiz=null,cover=false,extra=0,R=3,C=4,split=0,squares=false,showT=true,shows=new Set(['rows','cols']),drag=false;
 const S=56,X0=70,Y0=40;
 function render(){
   svg.innerHTML='';
-  const W=X0+C*S+40,H=Y0+(R+(extra?1:0))*S+40;svg.setAttribute('viewBox',`0 0 ${Math.max(W,500)} ${H}`);
+  const W=X0+C*S+170,H=Y0+(R+(extra?1:0))*S+70;svg.setAttribute('viewBox',`0 0 ${Math.max(W,500)} ${H}`);
+  const RC='#f59e0b',CC='#06b6d4';
+  if(look==='rows')for(let r=0;r<R;r++){const b=el('rect',{x:X0-6,y:Y0+r*S+3,width:C*S+12,height:S-6,rx:(S-6)/2,fill:r===sel?'#fef3c7':'transparent',stroke:RC,'stroke-width':r===sel?4:2.5,style:'cursor:pointer'},svg);
+    b.addEventListener('pointerdown',()=>{sel=r;render();});txt(svg,X0+C*S+16,Y0+r*S+S/2+6,`${C} in this row`,15,'#b45309','700','start');}
+  if(look==='cols')for(let c=0;c<C;c++){const b=el('rect',{x:X0+c*S+3,y:Y0-6,width:S-6,height:R*S+12,rx:(S-6)/2,fill:c===sel?'#cffafe':'transparent',stroke:CC,'stroke-width':c===sel?4:2.5,style:'cursor:pointer'},svg);
+    b.addEventListener('pointerdown',()=>{sel=c;render();});txt(svg,X0+c*S+S/2,Y0+R*S+30,String(R),18,'#0e7490','800');}
+  if(look==='cols')txt(svg,X0+C*S+16,Y0+R*S+30,`in each column`,15,'#0e7490','700','start');
   for(let r=0;r<R;r++){
-    txt(svg,X0-24,Y0+r*S+S/2+6,String(r+1),14,'#94a3b8');
+    txt(svg,X0-24,Y0+r*S+S/2+6,String(r+1),14,look==='rows'?'#b45309':'#94a3b8',look==='rows'?'800':'normal');
     for(let c=0;c<C;c++){
       const x=X0+c*S+S/2,y=Y0+r*S+S/2,top=split&&r<split,col=split?(top?'#ef4444':'#2563eb'):'#ef4444';
-      if(squares)el('rect',{x:x-S/2+1,y:y-S/2+1,width:S-2,height:S-2,fill:split?(top?'#fecaca':'#bfdbfe'):'#fecaca',stroke:col,'stroke-width':2},svg);
-      else el('circle',{cx:x,cy:y,r:S*0.36,fill:col},svg);
+      if(squares)el('rect',{x:x-S/2+1,y:y-S/2+1,width:S-2,height:S-2,fill:split?(top?'#fecaca':'#bfdbfe'):'#fecaca',stroke:col,'stroke-width':2,'pointer-events':look?'none':'auto'},svg);
+      else el('circle',{cx:x,cy:y,r:S*0.36,fill:col,'pointer-events':look?'none':'auto'},svg);
     }
   }
   for(let e=0;e<extra;e++){const x=X0+e*S+S/2,y=Y0+R*S+S/2;if(squares)el('rect',{x:x-S/2+1,y:y-S/2+1,width:S-2,height:S-2,fill:'#fef08a',stroke:'#ca8a04','stroke-width':2},svg);else el('circle',{cx:x,cy:y,r:S*0.36,fill:'#eab308'},svg);}
   if(cover&&R>1&&C>1){el('rect',{x:X0+S-2,y:Y0+S-2,width:(C-1)*S+4,height:(R-1)*S+4,rx:8,fill:'#475569'},svg);txt(svg,X0+S+(C-1)*S/2,Y0+S+(R-1)*S/2+12,'?',40,'#fff','800');}
-  for(let c=0;c<C;c++)txt(svg,X0+c*S+S/2,Y0-12,String(c+1),14,'#94a3b8');
+  for(let c=0;c<C;c++)txt(svg,X0+c*S+S/2,Y0-12,String(c+1),14,look==='cols'?'#0e7490':'#94a3b8',look==='cols'?'800':'normal');
   if(split){
     const y=Y0+split*S;
     el('line',{x1:X0-10,x2:X0+C*S+10,y1:y,y2:y,stroke:'#111827','stroke-width':4,'stroke-dasharray':'10 6'},svg);
@@ -61,19 +75,23 @@ function render(){
     h.addEventListener('pointerdown',e=>{drag=true;svg.setPointerCapture(e.pointerId);e.preventDefault();});
   }
   const T=R*C,tot=showT?T:'?',lines=[];
-  if(shows.has('rows'))lines.push(`${R} row${R>1?'s':''} of ${C} = ${tot}`);
+  if(look==='rows'&&sel>=0&&sel<R)lines.push(`This is <span class="rw">row ${sel+1}</span>. There ${C===1?'is':'are'} <b>${C}</b> in this row, and in every row.`);
+  if(look==='cols'&&sel>=0&&sel<C)lines.push(`This is <span class="cl">column ${sel+1}</span>. There ${R===1?'is':'are'} <b>${R}</b> in this column, and in every column.`);
+  if(shows.has('rows'))lines.push(`There ${R===1?'is':'are'} <span class="rw">${R} row${R>1?'s':''}</span>, with <b>${C}</b> in each row. &nbsp; ${R} row${R>1?'s':''} of ${C} = ${tot}`);
+  if(shows.has('cols'))lines.push(`There ${C===1?'is':'are'} <span class="cl">${C} column${C>1?'s':''}</span>, with <b>${R}</b> in each column. &nbsp; ${C} column${C>1?'s':''} of ${R} = ${tot}`);
   if(shows.has('add'))lines.push(Array(R).fill(C).join(' + ')+` = ${tot}`);
   if(shows.has('mult')){lines.push(`${R} × ${C} = ${tot}`+(R!==C?` &nbsp; and &nbsp; ${C} × ${R} = ${tot}`:''));}
   if(shows.has('div'))lines.push(`${tot} ÷ ${R} = ${showT?C:'?'}`+(R!==C?` &nbsp; and &nbsp; ${tot} ÷ ${C} = ${showT?R:'?'}`:''));
   if(split)lines.push(`<span style="color:#ef4444">${split} × ${C} = ${showT?split*C:'?'}</span> &nbsp;+&nbsp; <span style="color:#2563eb">${R-split} × ${C} = ${showT?(R-split)*C:'?'}</span> &nbsp;→&nbsp; ${R} × ${C} = ${tot}`);
   if(extra){const TT=T+extra,t2=showT?TT:'?';lines.push(`<span style="color:#a16207">${R} × ${C} + ${extra} = ${t2} &nbsp; → &nbsp; ${t2} ÷ ${C} = ${R} remainder ${extra}</span>`);}
+  if(quiz&&!quiz.done)lines.length=0;
   if(cover)lines.unshift('Part of the array is covered. How many are there altogether? You can see how many are in one row and one column.');
   $('eq').innerHTML=lines.join('<br>');$('ev').textContent=extra;
   $('rv').textContent=R;$('cv').textContent=C;
 }
 svg.addEventListener('pointermove',e=>{if(!drag)return;const y=pt(svg,e).y;const k=Math.max(1,Math.min(R-1,Math.round((y-Y0)/S)));if(k!==split){split=k;render();}});
 svg.addEventListener('pointerup',()=>{drag=false;});
-function set(r,c){R=Math.max(1,Math.min(12,r));C=Math.max(1,Math.min(12,c));extra=Math.min(extra,C-1);if(split>=R)split=R>1?R-1:0;render();}
+function set(r,c){R=Math.max(1,Math.min(12,r));C=Math.max(1,Math.min(12,c));sel=-1;if(quiz){quiz=null;$('opts').innerHTML='';}extra=Math.min(extra,C-1);if(split>=R)split=R>1?R-1:0;render();}
 $('rm').onclick=()=>set(R-1,C);$('rp').onclick=()=>set(R+1,C);$('cm').onclick=()=>set(R,C-1);$('cp').onclick=()=>set(R,C+1);
 $('coverBtn').onclick=e=>{cover=!cover;e.target.classList.toggle('on',cover);render();};
 $('em').onclick=()=>{extra=Math.max(0,extra-1);render();};$('ep').onclick=()=>{extra=Math.min(C-1,extra+1);render();};
@@ -82,5 +100,17 @@ $('splitBtn').onclick=e=>{if(R<2)return;split=split?0:Math.floor(R/2);e.target.c
 document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{const s=b.dataset.s;shows.has(s)?shows.delete(s):shows.add(s);b.classList.toggle('on',shows.has(s));render();});
 $('totBtn').onclick=e=>{showT=!showT;e.target.classList.toggle('on',showT);render();};
 $('shapeBtn').onclick=e=>{squares=!squares;e.target.classList.toggle('on',squares);render();};
+document.querySelectorAll('[data-look]').forEach(b=>b.onclick=()=>{const v=b.dataset.look;look=look===v?null:v;sel=-1;document.querySelectorAll('[data-look]').forEach(x=>x.classList.toggle('on',x.dataset.look===look));render();});
+const QS=[['How many <span class="rw">rows</span> are there?',()=>R,'rows'],['How many are in <span class="rw">each row</span>?',()=>C,'rows'],['How many <span class="cl">columns</span> are there?',()=>C,'cols'],['How many are in <span class="cl">each column</span>?',()=>R,'cols']];
+$('quizBtn').onclick=()=>{
+  let r,c;do{r=2+Math.floor(Math.random()*5);c=2+Math.floor(Math.random()*5);}while(r===c);
+  R=r;C=c;sel=-1;extra=0;split=0;cover=false;$('splitBtn').classList.remove('on');$('coverBtn').classList.remove('on');
+  look=null;document.querySelectorAll('[data-look]').forEach(x=>x.classList.remove('on'));
+  const q=QS[Math.floor(Math.random()*4)];quiz={q,done:false};render();
+  $('eq').innerHTML=q[0];const O=$('opts');O.innerHTML='';
+  for(let n=1;n<=8;n++){const b=document.createElement('button');b.textContent=n;b.onclick=()=>{
+    if(n===q[1]()){quiz.done=true;look=q[2];document.querySelectorAll('[data-look]').forEach(x=>x.classList.toggle('on',x.dataset.look===look));O.innerHTML='';render();$('eq').innerHTML='✓ Yes! '+$('eq').innerHTML;}
+    else{b.disabled=true;b.style.opacity=.3;$('eq').innerHTML=q[0]+'<br><span style="font-size:18px;color:#b45309">Rows go across ↔. Columns go up and down ↕.</span>';}};O.appendChild(b);}
+};
 render();
 </script></body></html>
