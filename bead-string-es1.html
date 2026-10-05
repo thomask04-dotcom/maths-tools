@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bead String (Early Stage 1)</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:16px}
+.title{font-weight:700;margin-right:6px;font-size:18px}
+button{font:inherit;font-size:17px;padding:9px 15px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.big{font-size:22px;font-weight:800;min-width:66px}
+#num{margin-left:auto;font-size:44px;font-weight:800;min-width:90px;text-align:center;padding:0 14px;background:#fff;border:3px solid #e5e7eb;border-radius:16px;line-height:1.3}
+#say{font-size:26px;padding:12px 16px;min-height:60px}
+#opts{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 10px}
+#opts button{font-size:26px;font-weight:800;width:68px;height:66px;border-radius:14px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Bead String</span>
+<button data-n="10" class="on">10 beads</button><button data-n="20">20 beads</button>
+<button id="showBtn" class="on">Show number</button>
+<span id="num">0</span>
+</div>
+<div class="bar">
+<button class="big" id="lessBtn">−1</button><button class="big" id="moreBtn">+1</button>
+<button id="countBtn">🗣 Count with me</button>
+<button id="makeBtn">🎯 Make a number</button>
+<button id="flashBtn">⚡ Quick look</button>
+<button id="resetBtn">Slide them all back</button>
+</div>
+<div id="say"></div>
+<div id="opts"></div>
+<svg id="svg" viewBox="0 0 1000 300"></svg>
+<div class="hint">Tap a bead to slide it (and the beads before it) to the left. The beads we have counted are on the left. The colours change every 5 beads, so you can see 5 and some more without counting. "Count with me" counts the beads one by one: the last number we say tells us how many there are.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),RED='#ef4444',WHITE='#f8fafc',WIRE_Y=150;
+let N=10,k=0,pos=[],showN=true,counting=null,target=null,flash=false,anim=null,busy=false;
+function D(){return N===10?78:44;}
+function targetX(i){const d=D(),x0=60,x1=940;return i<k?x0+i*d+d/2:x1-(N-i)*d+d/2;}
+function col(i){return Math.floor(i/5)%2===0?RED:WHITE;}
+function render(){
+  svg.innerHTML='';const d=D(),r=d*0.45;
+  el('rect',{x:20,y:WIRE_Y-60,width:960,height:120,rx:20,fill:'#f8fafc'},svg);
+  el('line',{x1:30,x2:970,y1:WIRE_Y,y2:WIRE_Y,stroke:'#475569','stroke-width':6,'stroke-linecap':'round'},svg);
+  el('circle',{cx:30,cy:WIRE_Y,r:10,fill:'#475569'},svg);el('circle',{cx:970,cy:WIRE_Y,r:10,fill:'#475569'},svg);
+  for(let i=0;i<N;i++){
+    const x=pos[i],g=el('g',{style:'cursor:pointer'},svg),counted=i<k,hl=counting&&counting.i===i;
+    el('circle',{cx:x,cy:WIRE_Y,r:r+(hl?6:0),fill:col(i),stroke:col(i)===WHITE?'#64748b':'#991b1b','stroke-width':hl?5:2.5},g);
+    el('circle',{cx:x-r*0.3,cy:WIRE_Y-r*0.32,r:r*0.22,fill:'#fff',opacity:.55,'pointer-events':'none'},g);
+    if(counting&&i<=counting.i)txt(svg,x,WIRE_Y-r-16,String(i+1),N===10?30:20,i===counting.i?'#1d4ed8':'#64748b','800');
+    g.addEventListener('pointerdown',()=>tap(i));
+  }
+  if(flash==='hide')el('rect',{x:20,y:WIRE_Y-70,width:960,height:140,rx:20,fill:'#334155'},svg);
+  // count label under counted group
+  if(k&&!counting&&flash!=='hide'&&showN){const d2=D();el('path',{d:`M${60} ${WIRE_Y+r+14} v10 H${60+k*d2} v-10`,fill:'none',stroke:'#2563eb','stroke-width':3},svg);txt(svg,60+k*d2/2,WIRE_Y+r+52,String(k),30,'#2563eb','800');}
+  $('num').textContent=showN&&flash!=='hide'?k:'?';
+}
+function slide(){cancelAnimationFrame(anim);const from=pos.slice(),to=pos.map((_,i)=>targetX(i)),t0=performance.now();
+  const step=now=>{const t=Math.min(1,(now-t0)/350),e=1-Math.pow(1-t,3);pos=from.map((f,i)=>f+(to[i]-f)*e);render();if(t<1)anim=requestAnimationFrame(step);};anim=requestAnimationFrame(step);}
+function say(s){$('say').innerHTML=s;}
+function describe(){
+  if(!k)return 'Tap a bead to slide it over.';
+  if(k<=5)return `<b>${k}</b>`+(k===5?'. That is a whole group of 5!':'');
+  if(k<10)return `<b>${k}</b>. That is 5 and ${k-5}.`;
+  if(k===10)return '<b>10</b>. That is 5 and 5!';
+  return `<b>${k}</b>. That is 10 and ${k-10}.`;
+}
+function tap(i){if(busy||flash)return;k=i<k?i:i+1;setK();}
+function setK(){slide();if(target!==null){if(k===target){say(`🎉 Yes! That is <b>${target}</b>.`);target=null;$('opts').innerHTML='';}else say(`Make <b>${target}</b>. You have ${k}. `+(k<target?'You need more.':'That is too many.'));}else say(describe());}
+$('moreBtn').onclick=()=>{if(busy||flash||k>=N)return;const hadT=target!==null;k++;setK();if(!hadT)say(`One more! ${k-1} and 1 more is <b>${k}</b>.`);};
+$('lessBtn').onclick=()=>{if(busy||flash||k<=0)return;const hadT=target!==null;k--;setK();if(!hadT)say(`One less! 1 less than ${k+1} is <b>${k}</b>.`);};
+$('resetBtn').onclick=()=>{if(busy)return;k=0;target=null;flash=false;$('opts').innerHTML='';setK();};
+$('countBtn').onclick=()=>{
+  if(busy||!k){if(!k)say('Slide some beads over first, then we can count them.');return;}
+  busy=true;let i=0;counting={i:0};say('Let\'s count: <b>1</b>');render();
+  const tick=setInterval(()=>{i++;if(i<k){counting.i=i;say('Let\'s count: '+Array.from({length:i+1},(_,j)=>j===i?`<b>${j+1}</b>`:j+1).join(', '));render();}
+    else{clearInterval(tick);setTimeout(()=>{counting=null;busy=false;render();say(`<b>${k}</b>! The last number we said is <b>${k}</b>, so there are <b>${k}</b> beads.`);},700);}},800);
+};
+$('makeBtn').onclick=()=>{if(busy)return;flash=false;$('opts').innerHTML='';let t;do{t=1+Math.floor(Math.random()*N);}while(t===k);target=t;say(`Make <b>${t}</b>. Slide ${t} beads over.`);render();};
+$('flashBtn').onclick=()=>{
+  if(busy)return;target=null;busy=true;let t;do{t=1+Math.floor(Math.random()*N);}while(t===k);k=t;pos=pos.map((_,i)=>targetX(i));flash='show';render();say('Quick look… how many?');
+  setTimeout(()=>{flash='hide';render();busy=false;say('How many beads did you see?');const O=$('opts');O.innerHTML='';
+    for(let n=1;n<=N;n++){const b=document.createElement('button');b.textContent=n;b.onclick=()=>{if(n===k){flash=false;O.innerHTML='';render();say(`✓ Yes! <b>${k}</b>. `+(k>5&&k<10?`5 and ${k-5}.`:k>10?`10 and ${k-10}.`:''));}else{b.disabled=true;b.style.opacity=.3;say('Have another look! <button id="peek" style="font-size:18px">👀 Peek</button>');$('peek').onclick=()=>{flash='show';render();setTimeout(()=>{flash='hide';render();},1200);};}};O.appendChild(b);}},1800);
+};
+$('showBtn').onclick=e=>{showN=!showN;e.target.classList.toggle('on',showN);render();};
+document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{if(busy)return;N=+b.dataset.n;document.querySelectorAll('[data-n]').forEach(x=>x.classList.toggle('on',x===b));k=0;target=null;flash=false;$('opts').innerHTML='';pos=Array.from({length:N},(_,i)=>targetX(i));render();say(describe());});
+pos=Array.from({length:N},(_,i)=>targetX(i));render();say(describe());
+</script></body></html>

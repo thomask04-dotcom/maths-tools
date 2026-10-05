@@ -17,7 +17,7 @@ svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-web
 .hint{font-size:13px;color:#6b7280;padding:6px 10px}
 </style></head><body>
 <div class="bar"><span class="title">Bead String & Rekenrek</span>
-<button data-m="s20" class="on">Bead string 20</button><button data-m="s100">Bead string 100</button><button data-m="r20">Rekenrek 20</button><button data-m="r100">Rekenrek 100</button>
+<button data-m="s20" class="on">Bead string 20</button><button data-m="d20">Double bead string</button><button data-m="s100">Bead string 100</button><button data-m="r20">Rekenrek 20</button><button data-m="r100">Rekenrek 100</button>
 <span id="num">0</span>
 </div>
 <div class="bar">
@@ -29,14 +29,14 @@ svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-web
 </div>
 <div id="say"></div>
 <svg id="svg"></svg>
-<div class="hint">Bead string: tap a bead to move the peg to it, and the beads up to the peg are counted. The beads come in groups of 5 colours, so you can see 5s and 10s without counting by ones. Rekenrek: tap a bead to slide it (and the beads before it) to the left. "Show 8 + 5" shows how to bridge through 10.</div>
+<div class="hint">Bead string: tap a bead to move the peg to it, and the beads up to the peg are counted. The beads come in groups of 5 colours, so you can see 5s and 10s without counting by ones. Double bead string: compare two amounts. The shaded part shows how many more. Rekenrek: tap a bead to slide it (and the beads before it) to the left. "Show 8 + 5" shows how to bridge through 10.</div>
 <script>
 const NS='http://www.w3.org/2000/svg';
 function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
 function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
 const $=id=>document.getElementById(id);
 const svg=$('svg'),RED='#dc2626',WHITE='#f8fafc';
-let mode='s20',k=0,rows=[0,0],nl=true,showN=true,add=null,flash=false;
+let ks=[0,0],mode='s20',k=0,rows=[0,0],nl=true,showN=true,add=null,flash=false;
 function nBeads(){return mode.endsWith('100')?100:20;}
 function beadCol(i){return Math.floor(i/5)%2===0?RED:WHITE;}
 function bead(g,x,y,r,col,faded,ring){
@@ -61,6 +61,20 @@ function render(){
       if(add){jump(0,add.a,'#2563eb',ly,X0,D,''+add.a);if(add.mid>add.a&&add.mid<add.a+add.b){jump(add.a,add.mid,'#16a34a',ly,X0,D,'+'+(add.mid-add.a));jump(add.mid,add.a+add.b,'#16a34a',ly,X0,D,'+'+(add.a+add.b-add.mid));}else jump(add.a,add.a+add.b,'#16a34a',ly,X0,D,'+'+add.b);}
       else if(k&&!flash)el('circle',{cx:X0+k*D,cy:ly,r:8,fill:'#f59e0b'},svg);
     }
+  } else if(mode==='d20'){
+    const D=44,X0=40,YS=[80,190],BLUE='#2563eb';svg.setAttribute('viewBox','0 0 1000 290');
+    const [a,b]=ks,lo=Math.min(a,b),hi=Math.max(a,b);
+    if(a!==b&&flash!=='hide'){el('rect',{x:X0+lo*D,y:YS[0]-34,width:(hi-lo)*D,height:YS[1]-YS[0]+68,rx:12,fill:'#fef3c7',stroke:'#f59e0b','stroke-width':2,'stroke-dasharray':'6 5'},svg);
+      txt(svg,X0+(lo+hi)/2*D,(YS[0]+YS[1])/2+8,(hi-lo)+' more',20,'#b45309','800');}
+    YS.forEach((Y,r)=>{
+      el('line',{x1:20,x2:X0+20*D+20,y1:Y,y2:Y,stroke:'#475569','stroke-width':4},svg);
+      for(let i=0;i<20;i++){const x=X0+i*D+D/2,col=Math.floor(i/5)%2===0?(r?BLUE:RED):WHITE;
+        const c=bead(svg,x,Y,D*0.44,col,i>=ks[r],null);if(col===BLUE)c.setAttribute('stroke','#1e3a8a');
+        c.addEventListener('pointerdown',()=>{if(flash)return;ks[r]=i+1===ks[r]?i:i+1;update();});}
+      if(ks[r]>0&&flash!=='hide'){const px=X0+ks[r]*D;el('rect',{x:px-4,y:Y-40,width:8,height:80,rx:3,fill:'#f59e0b'},svg);}
+      if(showN&&flash!=='hide')txt(svg,X0+20*D+48,Y+9,String(ks[r]),26,r?BLUE:RED,'800');
+    });
+    if(flash==='hide')el('rect',{x:10,y:30,width:980,height:220,rx:16,fill:'#334155'},svg);
   } else if(mode==='s100'){
     const D=44,X0=60,RH=70;svg.setAttribute('viewBox',`0 0 1000 ${5*RH+40}`);
     for(let r=0;r<5;r++){const y=40+r*RH;el('line',{x1:X0-10,x2:X0+20*D+10,y1:y,y2:y,stroke:'#475569','stroke-width':3},svg);txt(svg,X0-20,y+6,String(r*20),14,'#64748b','normal','end');
@@ -82,26 +96,28 @@ function render(){
 function jump(a,b,col,ly,X0,D,label){const x1=X0+a*D,x2=X0+b*D,h=Math.min(70,18+(x2-x1)*0.18),mx=(x1+x2)/2;
   el('path',{d:`M${x1} ${ly-4} Q${mx} ${ly-4-2*h} ${x2} ${ly-4}`,fill:'none',stroke:col,'stroke-width':3},svg);
   el('polygon',{points:`${x2},${ly-4} ${x2-9},${ly-14} ${x2-2},${ly-17}`,fill:col},svg);txt(svg,mx,ly-10-h,label,17,col,'800');}
-function total(){return mode.startsWith('s')?(add?add.a+add.b:k):rows.reduce((s,v)=>s+v,0);}
+function total(){if(mode==='d20')return ks[0]+ks[1];return mode.startsWith('s')?(add?add.a+add.b:k):rows.reduce((s,v)=>s+v,0);}
 function update(){
   const t=total();$('num').textContent=showN&&flash!=='hide'?t:'?';let s='';
-  if(add){s=add.mid>add.a&&add.mid<add.a+add.b?`${add.a} + ${add.b}: make 10 first. ${add.a} + ${add.mid-add.a} = ${add.mid}, then ${add.mid} + ${add.a+add.b-add.mid} = <b>${add.a+add.b}</b>`:`${add.a} + ${add.b} = <b>${add.a+add.b}</b>`;}
+  if(mode==='d20'&&showN&&!flash&&(ks[0]||ks[1])){const [a,b]=ks;s=`Red string: <b>${a}</b>. Blue string: <b>${b}</b>. Together they make <b>${a+b}</b>.`+(a===b?' They are the <b>same</b>.':` ${Math.max(a,b)} is <b>${Math.abs(a-b)} more</b> than ${Math.min(a,b)}.`);}
+  else if(add){s=add.mid>add.a&&add.mid<add.a+add.b?`${add.a} + ${add.b}: make 10 first. ${add.a} + ${add.mid-add.a} = ${add.mid}, then ${add.mid} + ${add.a+add.b-add.mid} = <b>${add.a+add.b}</b>`:`${add.a} + ${add.b} = <b>${add.a+add.b}</b>`;}
   else if(showN&&t&&!flash){
     if(mode.startsWith('r')&&mode==='r20'){const [a,b]=rows;s=a&&b?`${a} on top and ${b} underneath make <b>${t}</b>.`:`<b>${t}</b>`;if(a>5)s+=` The top row is 5 and ${a-5}.`;}
     else{const tens=Math.floor(t/10),ones=t%10;s=t>=10?`<b>${t}</b> is ${tens} ten${tens>1?'s':''}${ones?' and '+ones:''}.`:t>5?`<b>${t}</b> is 5 and ${t-5}.`:`<b>${t}</b>`;if(mode!=='s100'&&t<20&&!mode.startsWith('r'))s+=` ${10*Math.ceil(t/10||1)-t||10} more to make ${10*Math.ceil((t+1)/10)}.`;}
   }
   $('say').innerHTML=s;render();
 }
-document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));k=0;rows=Array(mode==='r100'?10:2).fill(0);add=null;flash=false;$('addWrap').style.display=mode==='s20'?'':'none';$('nlBtn').style.display=mode==='s20'?'':'none';update();});
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));k=0;ks=[0,0];rows=Array(mode==='r100'?10:2).fill(0);add=null;flash=false;$('addWrap').style.display=mode==='s20'||mode==='d20'?'':'none';$('nlBtn').style.display=mode==='s20'?'':'none';update();});
 $('nlBtn').onclick=e=>{nl=!nl;e.target.classList.toggle('on',nl);render();};
-$('addBtn').onclick=()=>{const a=Math.max(0,Math.min(20,Math.round(+$('aIn').value||0))),b=Math.max(0,Math.min(20-a,Math.round(+$('bIn').value||0)));$('aIn').value=a;$('bIn').value=b;add={a,b,mid:10*Math.ceil((a+0.001)/10)};if(!nl){nl=true;$('nlBtn').classList.add('on');}update();};
+$('addBtn').onclick=()=>{const a=Math.max(0,Math.min(20,Math.round(+$('aIn').value||0))),b=Math.max(0,Math.min(20-a,Math.round(+$('bIn').value||0)));$('aIn').value=a;$('bIn').value=b;if(mode==='d20'){ks=[a,b];update();return;}add={a,b,mid:10*Math.ceil((a+0.001)/10)};if(!nl){nl=true;$('nlBtn').classList.add('on');}update();};
 $('showBtn').onclick=e=>{showN=!showN;e.target.classList.toggle('on',showN);update();};
-$('clearBtn').onclick=()=>{k=0;rows=rows.map(()=>0);add=null;update();};
+$('clearBtn').onclick=()=>{k=0;ks=[0,0];rows=rows.map(()=>0);add=null;update();};
 $('flashBtn').onclick=()=>{
   const max=nBeads();add=null;
-  if(mode.startsWith('s'))k=1+Math.floor(Math.random()*max);else rows=rows.map(()=>Math.floor(Math.random()*11));
+  if(mode==='d20')ks=[1+Math.floor(Math.random()*20),1+Math.floor(Math.random()*20)];
+  else if(mode.startsWith('s'))k=1+Math.floor(Math.random()*max);else rows=rows.map(()=>Math.floor(Math.random()*11));
   flash='show';$('say').innerHTML='Quick! How many?';update();
-  setTimeout(()=>{if(mode.startsWith('s')){flash='hide';render();svg.querySelectorAll('circle').forEach(c=>c.setAttribute('opacity',0.05));}else{flash='hide';render();}
+  setTimeout(()=>{if(mode==='d20'){flash='hide';render();}else if(mode.startsWith('s')){flash='hide';render();svg.querySelectorAll('circle').forEach(c=>c.setAttribute('opacity',0.05));}else{flash='hide';render();}
     $('num').textContent='?';$('say').innerHTML='How many beads were counted? <button id="rev">Show me</button>';$('rev').onclick=()=>{flash=false;update();};},2000);
 };
 update();
