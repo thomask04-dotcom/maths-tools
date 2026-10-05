@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>O'clock Clock</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:16px}
+.title{font-weight:700;margin-right:6px;font-size:18px}
+button{font:inherit;font-size:17px;padding:9px 15px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#score{margin-left:auto;font-size:22px;font-weight:800}
+#say{font-size:28px;padding:10px 16px;min-height:96px;text-align:center}
+#opts{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;padding:0 16px 10px;min-height:88px}
+#opts button{font-size:26px;font-weight:800;padding:12px 22px;border-radius:16px;border-width:3px}
+#opts button.dig{font-family:ui-monospace,Menlo,Consolas,monospace;background:#111827;color:#4ade80;border-color:#111827;font-size:32px}
+.wrap{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:center;padding:6px 10px}
+svg{width:100%;max-width:440px;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.side{display:flex;flex-direction:column;align-items:center;gap:14px;min-width:260px}
+.digital{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:78px;font-weight:800;background:#111827;color:#4ade80;border-radius:18px;padding:8px 28px;min-width:250px;text-align:center}
+.words{font-size:42px;font-weight:800;color:#1e3a8a;text-align:center}
+.routine{font-size:24px;color:#475569;text-align:center;min-height:34px}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">O'clock</span>
+<button id="backBtn">◀ 1 hour earlier</button><button id="nextBtn">1 hour later ▶</button>
+<button id="anaBtn" class="on">Analog clock</button><button id="digBtn" class="on">Digital clock</button><button id="wordBtn" class="on">Words</button>
+<button id="nameBtn">Name the hands</button><button id="dayBtn">My day</button>
+<span id="score"></span>
+</div>
+<div class="bar">
+<button id="g1">❓ What time is it?</button><button id="g2">🎯 Make the time</button><button id="g3">🔗 Match the clocks</button><button id="freeBtn">Explore</button>
+</div>
+<div id="say"></div>
+<div id="opts"></div>
+<div class="wrap">
+<svg id="svg" viewBox="0 0 440 440"></svg>
+<div class="side"><div class="digital" id="dig"></div><div class="words" id="words"></div><div class="routine" id="routine"></div></div>
+</div>
+<div class="hint">Tap a number on the clock, or drag the short red hour hand, to make an o'clock time. At o'clock, the long blue minute hand always points straight up to 12. "1 hour later" shows the minute hand going all the way around once while the hour hand moves to the next number.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),C=220,R=200,HR='#dc2626',MIN='#2563eb';
+const WORD=['twelve','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve'];
+const DAY={7:'☀️ Wake up',8:'🥣 Breakfast',9:'🏫 School starts',12:'🥪 Lunch time',3:'🎒 Home time',6:'🍝 Dinner'};
+let h=3,minAng=0,hourAng=90,showA=true,showD=true,showW=true,names=false,day=false,game=null,score=0,anim=null,busy=false,drag=false;
+function setHands(){hourAng=(h%12)*30;minAng=0;}
+function render(){
+  svg.innerHTML='';
+  if(!showA){el('rect',{x:20,y:20,width:400,height:400,rx:200,fill:'#e2e8f0'},svg);txt(svg,C,C+12,'?',90,'#94a3b8','800');return;}
+  el('circle',{cx:C,cy:C,r:R+14,fill:'#1e3a8a'},svg);el('circle',{cx:C,cy:C,r:R,fill:'#fff'},svg);
+  for(let i=0;i<60;i++){const a=i*6*Math.PI/180,L=i%5?7:16;el('line',{x1:C+(R-4)*Math.sin(a),y1:C-(R-4)*Math.cos(a),x2:C+(R-4-L)*Math.sin(a),y2:C-(R-4-L)*Math.cos(a),stroke:'#1f2937','stroke-width':i%5?1.5:4},svg);}
+  for(let n=1;n<=12;n++){const a=n*30*Math.PI/180,x=C+(R-50)*Math.sin(a),y=C-(R-50)*Math.cos(a),hl=(h%12||12)===n;
+    const g=el('g',{style:'cursor:pointer'},svg);el('circle',{cx:x,cy:y,r:26,fill:hl?'#fee2e2':'transparent'},g);
+    txt(g,x,y+14,String(n),40,hl?HR:'#111827','800');g.addEventListener('pointerdown',e=>{e.stopPropagation();tapNum(n);});}
+  const hand=(ang,len,w,col)=>{const a=ang*Math.PI/180;el('line',{x1:C-16*Math.sin(a),y1:C+16*Math.cos(a),x2:C+len*Math.sin(a),y2:C-len*Math.cos(a),stroke:col,'stroke-width':w,'stroke-linecap':'round','pointer-events':'none'},svg);
+    el('polygon',{points:`${C+(len+16)*Math.sin(a)},${C-(len+16)*Math.cos(a)} ${C+len*Math.sin(a)+w*Math.cos(a)},${C-len*Math.cos(a)+w*Math.sin(a)} ${C+len*Math.sin(a)-w*Math.cos(a)},${C-len*Math.cos(a)-w*Math.sin(a)}`,fill:col,'pointer-events':'none'},svg);};
+  hand(minAng,R*0.6,9,MIN);hand(hourAng,R*0.4,14,HR);
+  el('circle',{cx:C,cy:C,r:12,fill:'#111827','pointer-events':'none'},svg);
+  // big grab area on the hour hand
+  const a=hourAng*Math.PI/180,gx=C+R*0.3*Math.sin(a),gy=C-R*0.3*Math.cos(a);
+  const grab=el('circle',{cx:gx,cy:gy,r:34,fill:'transparent',style:'cursor:grab'},svg);grab.addEventListener('pointerdown',e=>{if(busy)return;drag=true;svg.setPointerCapture(e.pointerId);e.preventDefault();});
+  if(names){const hl=Math.sin(a)>=0.01?1:-1,ma=minAng*Math.PI/180,mp=[C+R*0.45*Math.sin(ma),C-R*0.45*Math.cos(ma)],hp=[C+R*0.25*Math.sin(a),C-R*0.25*Math.cos(a)],ml=[C-hl*64,C-40],hlp=[C+hl*64,C+44];
+    el('line',{x1:ml[0],y1:ml[1],x2:mp[0],y2:mp[1],stroke:MIN,'stroke-width':2.5,'stroke-dasharray':'4 3','pointer-events':'none'},svg);el('line',{x1:hlp[0],y1:hlp[1],x2:hp[0],y2:hp[1],stroke:HR,'stroke-width':2.5,'stroke-dasharray':'4 3','pointer-events':'none'},svg);
+    label(...ml,'minute hand',MIN);label(...hlp,'hour hand',HR);}
+}
+function label(x,y,s,col){el('rect',{'pointer-events':'none',x:x-54,y:y-16,width:108,height:30,rx:10,fill:'#fff',stroke:col,'stroke-width':2.5},svg);txt(svg,x,y+5,s,16,col,'800');}
+function side(){const n=h%12||12,hide=game&&game.hideAnswer;
+  $('dig').style.display=showD?'':'none';$('dig').textContent=hide&&game.hideDig?'?:00':`${n}:00`;
+  $('words').style.display=showW?'':'none';$('words').textContent=hide?'? o\'clock':`${n} o'clock`;
+  $('routine').textContent=day&&DAY[n]&&!hide?`${n} o'clock: ${DAY[n]}`:'';}
+function show(){render();side();}
+function say(s){$('say').innerHTML=s;}
+function animateTo(newH,dir){
+  if(busy)return;busy=true;const fromH=hourAng,turns=dir,t0=performance.now(),dur=1600;
+  const step=now=>{const k=Math.min(1,(now-t0)/dur),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;minAng=360*turns*e;hourAng=fromH+30*turns*e;render();
+    if(k<1)anim=requestAnimationFrame(step);else{h=newH;setHands();busy=false;show();after();}};anim=requestAnimationFrame(step);}
+function after(){const n=h%12||12;if(!game)say(`It is <b>${n} o'clock</b>. The hour hand points to ${n}. The minute hand points to 12.`);else checkMake();}
+$('nextBtn').onclick=()=>{if(game&&game.t!=='make')return;animateTo(h%12+1,1);};
+$('backBtn').onclick=()=>{if(game&&game.t!=='make')return;animateTo((h+10)%12+1,-1);};
+function tapNum(n){if(busy||(game&&game.t!=='make'))return;h=n;setHands();show();after();}
+svg.addEventListener('pointermove',e=>{if(!drag)return;const p=pt(e);let ang=(Math.atan2(p.x-C,-(p.y-C))*180/Math.PI+360)%360;hourAng=ang;render();});
+svg.addEventListener('pointerup',()=>{if(!drag)return;drag=false;const n=Math.round(hourAng/30)%12||12;h=n;setHands();show();after();});
+const tog=(id,fn)=>$(id).onclick=e=>{fn();e.target.classList.toggle('on');show();};
+tog('anaBtn',()=>showA=!showA);tog('digBtn',()=>showD=!showD);tog('wordBtn',()=>showW=!showW);tog('nameBtn',()=>names=!names);tog('dayBtn',()=>day=!day);
+function rnd(not){let n;do{n=1+Math.floor(Math.random()*12);}while(n===not);return n;}
+function opts(list,fn,dig){const O=$('opts');O.innerHTML='';list.forEach(v=>{const b=document.createElement('button');b.textContent=dig?`${v}:00`:`${v} o'clock`;if(dig)b.classList.add('dig');b.onclick=()=>fn(v,b);O.appendChild(b);});}
+function three(n){const s=new Set([n]);while(s.size<3)s.add(rnd(n));return [...s].sort(()=>Math.random()-.5);}
+function win(msg){score++;$('score').textContent='⭐ '+score;say('🎉 '+msg);$('opts').innerHTML='';game.done=true;game.hideAnswer=false;show();setTimeout(()=>{if(game&&game.done)startGame(game.t);},2200);}
+function wrong(b,msg){b.disabled=true;b.style.opacity=.3;say(msg);}
+function startGame(t){
+  const n=rnd(h%12||12);game={t,n,done:false,hideAnswer:true,hideDig:true};
+  if(t==='read'){h=n;setHands();showA=true;show();say('What time is it?');opts(three(n),(v,b)=>v===n?win(`Yes! It is <b>${n} o'clock</b>.`):wrong(b,'Look at the short red hour hand. Which number is it pointing to?'));}
+  if(t==='make'){h=rnd(n);setHands();game.hideAnswer=false;show();say(`Make <b>${n} o'clock</b>. Tap the number, or drag the hour hand.`);$('opts').innerHTML='';}
+  if(t==='match'){h=n;setHands();show();say('Which digital clock matches?');opts(three(n),(v,b)=>v===n?win(`Yes! <b>${n}:00</b> is <b>${n} o'clock</b>.`):wrong(b,'Look at where the hour hand is pointing.'),true);}
+}
+function checkMake(){if(!game||game.t!=='make'||game.done)return;const n=h%12||12;if(n===game.n)win(`Yes! That is <b>${n} o'clock</b>.`);else say(`That is ${n} o'clock. Make <b>${game.n} o'clock</b>.`);}
+$('g1').onclick=()=>startGame('read');$('g2').onclick=()=>startGame('make');$('g3').onclick=()=>startGame('match');
+$('freeBtn').onclick=()=>{game=null;$('opts').innerHTML='';show();after();};
+setHands();show();after();
+</script></body></html>
