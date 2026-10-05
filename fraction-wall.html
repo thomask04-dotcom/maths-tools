@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fraction Wall</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc}
+.title{font-weight:700;margin-right:6px}
+button{font:inherit;font-size:14px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.chip{padding:4px 8px;min-width:38px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Fraction Wall</span>
+<button id="labelBtn">Labels: Fractions</button>
+<button id="lineBtn">Compare line</button>
+<button id="clearBtn">Clear shading</button>
+</div>
+<div class="bar" id="rowsBar"><span style="font-size:14px">Rows:</span></div>
+<svg id="svg"></svg>
+<div class="hint">Tap pieces to shade them. Turn on the compare line and drag its red handle to compare fractions.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b){[a,b]=[b,a%b];}return a;}
+function frac(p,x,yMid,f,fs,fill){
+  fill=fill||'#1f2937';
+  if(f.t!==undefined){txt(p,x,yMid+fs*0.35,f.t,fs,fill);return;}
+  const lead=(f.sign||'')+(f.w?String(f.w):'');
+  if(!f.n){txt(p,x,yMid+fs*0.35,lead||'0',fs,fill);return;}
+  const cw=fs*0.6,fw=cw*Math.max(String(f.n).length,String(f.d).length)+4,lw=lead?cw*lead.length+3:0,x0=x-(lw+fw)/2;
+  if(lead)txt(p,x0,yMid+fs*0.35,lead,fs,fill,'start');
+  const cx=x0+lw+fw/2;
+  txt(p,cx,yMid-fs*0.2,f.n,fs*0.85,fill);
+  el('line',{x1:cx-fw/2,x2:cx+fw/2,y1:yMid,y2:yMid,stroke:fill,'stroke-width':1.4},p);
+  txt(p,cx,yMid+fs*0.85,f.d,fs*0.85,fill);
+}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+
+const svg=document.getElementById('svg');
+const X0=20,W=820,ROW=48,BH=40,TOP=34;
+const COLORS=['#64748b','#ef4444','#f97316','#eab308','#84cc16','#22c55e','#14b8a6','#06b6d4','#3b82f6','#6366f1','#a855f7','#ec4899'];
+const shown=new Set([1,2,3,4,5,6,8,10,12]);
+const shaded={};for(let d=1;d<=12;d++)shaded[d]=new Set();
+const MODES=['Fractions','Decimals','Percentages','No labels'];
+let mode=0,lineOn=false,lineX=X0+W/2,dragLine=false;
+function dec(n,d){return (n*1000)%d===0?String(parseFloat((n/d).toFixed(3))):'≈'+(n/d).toFixed(2);}
+function pct(n,d){return (n*1000)%d===0?parseFloat((n*100/d).toFixed(1))+'%':'≈'+Math.round(n*100/d)+'%';}
+function rows(){return [...shown].sort((a,b)=>a-b);}
+function render(){
+  svg.innerHTML='';
+  const R=rows(),H=TOP+R.length*ROW+10;
+  svg.setAttribute('viewBox',`0 0 1000 ${H}`);
+  R.forEach((d,r)=>{
+    const y=TOP+r*ROW,w=W/d,cy=y+BH/2;
+    for(let i=0;i<d;i++){
+      const on=shaded[d].has(i),g=el('g',{style:'cursor:pointer'},svg);
+      el('rect',{x:X0+i*w,y,width:w,height:BH,fill:on?COLORS[d-1]:'#fff',stroke:'#334155','stroke-width':1.5},g);
+      const cx=X0+i*w+w/2,fill=on?'#fff':'#1f2937',fs=d>=10?14:17;
+      if(mode===0)frac(g,cx,cy,d===1?{t:'1'}:{n:1,d},fs,fill);
+      else if(mode<3)txt(g,cx,cy+5,mode===1?dec(1,d):pct(1,d),d>=9?12:15,fill);
+      g.addEventListener('click',()=>{on?shaded[d].delete(i):shaded[d].add(i);render();});
+    }
+    const k=shaded[d].size;
+    if(k&&mode!==3){
+      if(mode===0){
+        if(d===1){txt(svg,905,cy+6,'1',17);}
+        else{
+          frac(svg,885,cy,{n:k,d},17);
+          const g2=gcd(k,d);
+          if(k===d){txt(svg,920,cy+6,'=',17);txt(svg,950,cy+6,'1',17);}
+          else if(g2>1){txt(svg,920,cy+6,'=',17);frac(svg,955,cy,{n:k/g2,d:d/g2},17);}
+        }
+      } else txt(svg,905,cy+6,mode===1?dec(k,d):pct(k,d),16);
+    }
+  });
+  if(lineOn){
+    el('line',{x1:lineX,x2:lineX,y1:TOP-8,y2:H-4,stroke:'#dc2626','stroke-width':3,'pointer-events':'none'},svg);
+    const h=el('rect',{x:lineX-18,y:2,width:36,height:24,rx:6,fill:'#dc2626',style:'cursor:ew-resize'},svg);
+    txt(svg,lineX,19,'◀ ▶',11,'#fff').setAttribute('pointer-events','none');
+    h.addEventListener('pointerdown',e=>{dragLine=true;svg.setPointerCapture(e.pointerId);e.preventDefault();});
+  }
+}
+svg.addEventListener('pointermove',e=>{
+  if(!dragLine)return;
+  let x=Math.max(X0,Math.min(X0+W,pt(svg,e).x)),best=null,bd=6;
+  for(const d of rows())for(let i=0;i<=d;i++){const bx=X0+W*i/d,dd=Math.abs(bx-x);if(dd<bd){bd=dd;best=bx;}}
+  lineX=best!==null?best:x;render();
+});
+svg.addEventListener('pointerup',()=>{dragLine=false;});
+const rb=document.getElementById('rowsBar');
+for(let d=1;d<=12;d++){
+  const b=document.createElement('button');b.className='chip'+(shown.has(d)?' on':'');b.textContent=d===1?'1':'1/'+d;
+  b.onclick=()=>{if(shown.has(d)){if(shown.size>1)shown.delete(d);}else shown.add(d);b.classList.toggle('on',shown.has(d));render();};
+  rb.appendChild(b);
+}
+document.getElementById('labelBtn').onclick=e=>{mode=(mode+1)%4;e.target.textContent='Labels: '+MODES[mode];render();};
+document.getElementById('lineBtn').onclick=e=>{lineOn=!lineOn;e.target.classList.toggle('on',lineOn);render();};
+document.getElementById('clearBtn').onclick=()=>{for(const d in shaded)shaded[d].clear();render();};
+render();
+</script></body></html>

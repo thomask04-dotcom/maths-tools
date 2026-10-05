@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Base-10 Blocks</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc}
+.title{font-weight:700;margin-right:6px}
+button{font:inherit;font-size:14px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.add{font-weight:600}
+#total{margin-left:auto;font-size:20px;font-weight:700;padding:4px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Base-10 Blocks</span>
+<button class="add" data-t="cube">+1000</button><button class="add" data-t="flat">+100</button>
+<button class="add" data-t="rod">+10</button><button class="add" data-t="unit">+1</button>
+<span id="total">0</span>
+</div>
+<div class="bar">
+<button id="modeBtn">Decimal mode</button>
+<button id="regroupBtn">Regroup (trade 10 for 1)</button>
+<button id="tidyBtn">Tidy</button>
+<button id="delBtn">Delete</button>
+<button id="clearBtn">Clear</button>
+<button id="showBtn" class="on">Show values</button>
+</div>
+<svg id="svg" viewBox="0 0 1000 620"></svg>
+<div class="hint">Double-tap a block to break it into 10 smaller blocks. Use Regroup to trade 10 blocks for 1 larger block. Decimal mode makes the flat worth 1.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,anchor,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+
+const svg=document.getElementById('svg');
+const U=11,VW=1000,VH=620,HEAD=56;
+const ORDER=['cube','flat','rod','unit'];
+const VAL={cube:1000,flat:100,rod:10,unit:1};
+const COL={cube:'#fca5a5',flat:'#93c5fd',rod:'#86efac',unit:'#fde047'};
+const NAMES=[['Thousands','Hundreds','Tens','Ones'],['Tens','Ones','Tenths','Hundredths']];
+const ADDL=[['+1000','+100','+10','+1'],['+10','+1','+0.1','+0.01']];
+let pieces=[],uid=0,sel=null,decMode=false,showVals=true,drag=null,lastTap={id:null,t:0};
+function size(t){return t==='cube'?[132,132]:t==='flat'?[110,110]:t==='rod'?[U,110]:[U,U];}
+function slot(t,i){
+  if(t==='cube'){const k=Math.floor(i/8),j=i%8;return [14+j*12,HEAD+14+j*12+k*236];}
+  if(t==='flat'){const k=Math.floor(i/10),j=i%10;return [262+j*12,HEAD+14+j*12+k*232];}
+  if(t==='rod'){const c=i%10,r=Math.floor(i/10);return [520+c*20,HEAD+14+r*124];}
+  const r=Math.floor(i/10),c=i%10;return [772+c*15+(c>=5?10:0),HEAD+14+r*15+(r>=5?10:0)];
+}
+function layout(){const n={cube:0,flat:0,rod:0,unit:0};for(const p of pieces){[p.x,p.y]=slot(p.t,n[p.t]++);}render();}
+function gridPath(x0,y0,w,h,nx,ny){let d='';for(let i=1;i<nx;i++){const x=x0+w*i/nx;d+=`M${x} ${y0}V${y0+h}`;}for(let j=1;j<ny;j++){const y=y0+h*j/ny;d+=`M${x0} ${y}H${x0+w}`;}return d;}
+function drawPiece(p,isSel){
+  const g=el('g',{transform:`translate(${p.x},${p.y})`,style:'cursor:grab'},svg);
+  const st=isSel?'#1d4ed8':'#334155',sw=isSel?3:1.2,c=COL[p.t],gl={stroke:'#334155','stroke-opacity':.4,'stroke-width':.7,fill:'none'};
+  if(p.t==='unit')el('rect',{width:U,height:U,fill:c,stroke:st,'stroke-width':sw},g);
+  else if(p.t==='rod'){el('rect',{width:U,height:110,fill:c,stroke:st,'stroke-width':sw},g);el('path',{d:gridPath(0,0,U,110,1,10),...gl},g);}
+  else if(p.t==='flat'){el('rect',{width:110,height:110,fill:c,stroke:st,'stroke-width':sw},g);el('path',{d:gridPath(0,0,110,110,10,10),...gl},g);}
+  else{const D=22;
+    el('polygon',{points:`0,${D} ${D},0 ${110+D},0 110,${D}`,fill:'#fecaca',stroke:st,'stroke-width':sw},g);
+    el('polygon',{points:`110,${D} ${110+D},0 ${110+D},110 110,${110+D}`,fill:'#f87171',stroke:st,'stroke-width':sw},g);
+    el('rect',{x:0,y:D,width:110,height:110,fill:c,stroke:st,'stroke-width':sw},g);
+    el('path',{d:gridPath(0,D,110,110,10,10),...gl},g);}
+  g.addEventListener('pointerdown',e=>startDrag(p,e));
+}
+function count(t){return pieces.filter(p=>p.t===t).length;}
+function fmtTotal(){const N=pieces.reduce((s,p)=>s+VAL[p.t],0);return decMode?(N/100).toFixed(2):N.toLocaleString('en-AU');}
+function render(){
+  svg.innerHTML='';
+  const names=NAMES[decMode?1:0];
+  ORDER.forEach((t,i)=>{
+    const bg=el('rect',{x:i*250,y:0,width:250,height:VH,fill:i%2?'#f8fafc':'#fff'},svg);
+    bg.addEventListener('pointerdown',()=>{sel=null;render();});
+    el('rect',{x:i*250,y:0,width:250,height:HEAD-10,fill:i%2?'#e2e8f0':'#eef2f7'},svg);
+    txt(svg,i*250+125,showVals?22:30,names[i],16,'#1f2937','middle','700');
+    if(showVals)txt(svg,i*250+125,39,count(t)+' block'+(count(t)===1?'':'s'),13,'#475569');
+    if(i)el('line',{x1:i*250,x2:i*250,y1:0,y2:VH,stroke:'#cbd5e1','stroke-width':1.5},svg);
+  });
+  for(const p of pieces)drawPiece(p,p.id===sel);
+  document.getElementById('total').textContent=showVals?fmtTotal():'?';
+  const al=ADDL[decMode?1:0];document.querySelectorAll('.add').forEach((b,i)=>b.textContent=al[i]);
+}
+function startDrag(p,e){
+  const q=pt(svg,e);pieces=pieces.filter(x=>x!==p);pieces.push(p);
+  drag={p,dx:q.x-p.x,dy:q.y-p.y,sx:q.x,sy:q.y,moved:false};sel=p.id;
+  svg.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();render();
+}
+svg.addEventListener('pointermove',e=>{
+  if(!drag)return;const q=pt(svg,e);if(Math.hypot(q.x-drag.sx,q.y-drag.sy)>3)drag.moved=true;
+  const [w,h]=size(drag.p.t);drag.p.x=Math.max(0,Math.min(VW-w,q.x-drag.dx));drag.p.y=Math.max(HEAD-10,Math.min(VH-h,q.y-drag.dy));render();
+});
+svg.addEventListener('pointerup',()=>{
+  if(!drag)return;const p=drag.p;
+  if(!drag.moved){const now=Date.now();if(lastTap.id===p.id&&now-lastTap.t<350){lastTap={id:null,t:0};breakPiece(p);}else lastTap={id:p.id,t:now};}
+  drag=null;render();
+});
+function breakPiece(p){const i=ORDER.indexOf(p.t);if(i===3)return;pieces=pieces.filter(q=>q!==p);for(let k=0;k<10;k++)pieces.push({id:++uid,t:ORDER[i+1]});sel=null;layout();}
+function regroup(){
+  for(let i=3;i>=1;i--){const t=ORDER[i];while(count(t)>=10){let n=0;pieces=pieces.filter(p=>!(p.t===t&&n++<10));pieces.push({id:++uid,t:ORDER[i-1]});}}
+  layout();
+}
+document.querySelectorAll('.add').forEach(b=>b.onclick=()=>{const t=b.dataset.t,p={id:++uid,t};[p.x,p.y]=slot(t,count(t));pieces.push(p);render();});
+document.getElementById('modeBtn').onclick=e=>{decMode=!decMode;e.target.classList.toggle('on',decMode);render();};
+document.getElementById('regroupBtn').onclick=regroup;
+document.getElementById('tidyBtn').onclick=layout;
+document.getElementById('delBtn').onclick=()=>{pieces=pieces.filter(p=>p.id!==sel);sel=null;render();};
+document.getElementById('clearBtn').onclick=()=>{pieces=[];sel=null;render();};
+document.getElementById('showBtn').onclick=e=>{showVals=!showVals;e.target.classList.toggle('on',showVals);render();};
+document.addEventListener('keydown',e=>{if(e.key==='Delete'||e.key==='Backspace'){pieces=pieces.filter(p=>p.id!==sel);sel=null;render();}});
+render();
+</script></body></html>

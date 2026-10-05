@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grid Map & Compass</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:6px 11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.dir{font-weight:800;min-width:48px}
+#say{font-size:20px;padding:8px 14px;min-height:44px}
+#opts{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 8px}
+#opts button{font-size:17px}
+#route{font-size:16px;padding:0 14px 6px;color:#475569}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Grid Map & Compass</span>
+<button id="q1">❓ What is at…?</button><button id="q2">❓ Find the grid reference</button><button id="q3">🚶 Walk the route</button>
+</div>
+<div class="bar">
+<span>Walker:</span><button class="dir" data-d="N">N ⬆</button><button class="dir" data-d="S">S ⬇</button><button class="dir" data-d="W">⬅ W</button><button class="dir" data-d="E">E ➡</button>
+<button data-turn="-1">↺ quarter turn left</button><button data-turn="1">↻ quarter turn right</button><button id="fwd">Step forward</button><button id="clrR">Clear route</button>
+</div>
+<div id="say"></div>
+<div id="opts"></div>
+<div id="route"></div>
+<svg id="svg" viewBox="0 0 1000 640"></svg>
+<div class="hint">A grid reference names a square: go across first (the letter), then up (the number), so B3 means column B, row 3. The walker moves one square at a time. Use north, south, east and west, or turn left and right and step forward.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),C=10,R=8,S=62,X0=120,Y0=40,LET='ABCDEFGHIJ';
+const PLACES=[
+ {n:'school',e:'🏫',c:[1,6]},{n:'shop',e:'🏪',c:[7,2]},{n:'big tree',e:'🌳',c:[4,7]},{n:'lake',e:'🦆',c:[2,2]},{n:'playground',e:'🎠',c:[5,4]},
+ {n:'house',e:'🏠',c:[8,6]},{n:'train station',e:'🚉',c:[0,0]},{n:'library',e:'📚',c:[6,0]},{n:'oval',e:'⚽',c:[9,4]},{n:'hospital',e:'🏥',c:[3,5]},{n:'bus stop',e:'🚏',c:[7,7]}];
+let walker={x:1,y:6,f:0},route=[],quiz=null,hi=null;
+const DIRS=['N','E','S','W'],DV={N:[0,1],E:[1,0],S:[0,-1],W:[-1,0]},DN={N:'north',E:'east',S:'south',W:'west'};
+const ref=(x,y)=>LET[x]+(y+1);
+function cellXY(x,y){return [X0+x*S,Y0+(R-1-y)*S];}
+function render(){
+  svg.innerHTML='';
+  el('rect',{x:X0,y:Y0,width:C*S,height:R*S,fill:'#dcfce7'},svg);
+  // river & roads for interest
+  el('path',{d:`M${X0} ${Y0+R*S-S*1.2} C${X0+S*2} ${Y0+R*S-S*2.5} ${X0+S*3} ${Y0+R*S-S*1.5} ${X0+S*4.2} ${Y0+R*S-S*3} S${X0+S*4.8} ${Y0+S*2} ${X0+S*4.6} ${Y0}`,fill:'none',stroke:'#7dd3fc','stroke-width':16,opacity:.9},svg);
+  el('ellipse',{cx:cellXY(2,2)[0]+S/2,cy:cellXY(2,2)[1]+S/2,rx:S*0.9,ry:S*0.6,fill:'#93c5fd',opacity:.9},svg);
+  el('path',{d:`M${X0} ${cellXY(0,4)[1]+S/2} H${X0+C*S} M${cellXY(6,0)[0]+S/2} ${Y0} V${Y0+R*S}`,stroke:'#d6d3d1','stroke-width':14,fill:'none'},svg);
+  for(let x=0;x<=C;x++)el('line',{x1:X0+x*S,x2:X0+x*S,y1:Y0,y2:Y0+R*S,stroke:'#475569','stroke-width':1.5},svg);
+  for(let y=0;y<=R;y++)el('line',{x1:X0,x2:X0+C*S,y1:Y0+y*S,y2:Y0+y*S,stroke:'#475569','stroke-width':1.5},svg);
+  for(let x=0;x<C;x++)txt(svg,X0+x*S+S/2,Y0+R*S+28,LET[x],20,'#111827','800');
+  for(let y=0;y<R;y++)txt(svg,X0-18,Y0+(R-1-y)*S+S/2+7,String(y+1),20,'#111827','800');
+  if(hi){const [hx,hy]=cellXY(...hi.c);el('rect',{x:hx+2,y:hy+2,width:S-4,height:S-4,fill:'none',stroke:hi.col||'#dc2626','stroke-width':5},svg);}
+  PLACES.forEach(p=>{const [x,y]=cellXY(...p.c);txt(svg,x+S/2,y+S/2+14,p.e,36);});
+  // route trail
+  if(route.length){let [px,py]=[route[0].x,route[0].y];const pts=[cellXY(px,py)];route.slice(1).forEach(r=>pts.push(cellXY(r.x,r.y)));
+    el('polyline',{points:pts.map(([x,y])=>`${x+S/2},${y+S/2}`).join(' '),fill:'none',stroke:'#dc2626','stroke-width':4,'stroke-dasharray':'8 6'},svg);}
+  const [wx,wy]=cellXY(walker.x,walker.y),cx=wx+S/2,cy=wy+S/2;
+  el('circle',{cx,cy,r:18,fill:'#f97316',stroke:'#fff','stroke-width':3},svg);
+  const a=walker.f*90*Math.PI/180;el('polygon',{points:`${cx+26*Math.sin(a)},${cy-26*Math.cos(a)} ${cx+12*Math.sin(a+2.2)},${cy-12*Math.cos(a+2.2)} ${cx+12*Math.sin(a-2.2)},${cy-12*Math.cos(a-2.2)}`,fill:'#9a3412'},svg);
+  // compass rose
+  const kx=880,ky=110;el('circle',{cx:kx,cy:ky,r:62,fill:'#fff',stroke:'#94a3b8','stroke-width':2},svg);
+  [['N',0],['E',90],['S',180],['W',270]].forEach(([d,ang])=>{const r=ang*Math.PI/180;el('polygon',{points:`${kx+50*Math.sin(r)},${ky-50*Math.cos(r)} ${kx+10*Math.sin(r+1.57)},${ky-10*Math.cos(r+1.57)} ${kx+10*Math.sin(r-1.57)},${ky-10*Math.cos(r-1.57)}`,fill:d==='N'?'#dc2626':'#475569'},svg);txt(svg,kx+76*Math.sin(r),ky-76*Math.cos(r)+7,d,20,'#111827','800');});
+  // key
+  let ky2=240;txt(svg,850,ky2,'Key',17,'#111827','800','start');PLACES.forEach((p,i)=>{txt(svg,850,ky2+26+i*27,p.e,20,'#111827','normal','start');txt(svg,880,ky2+24+i*27,p.n,14,'#334155','normal','start');});
+  const hit=el('rect',{x:X0,y:Y0,width:C*S,height:R*S,fill:'transparent',style:'cursor:pointer'},svg);
+  hit.addEventListener('pointerdown',e=>{const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());const x=Math.floor((p.x-X0)/S),y=R-1-Math.floor((p.y-Y0)/S);tapCell(x,y);});
+  $('route').textContent=route.length>1?'Route: '+summ():'';
+}
+function at(x,y){return PLACES.find(p=>p.c[0]===x&&p.c[1]===y);}
+function say(s){$('say').innerHTML=s;}
+function tapCell(x,y){
+  if(quiz&&quiz.t==='find'){if(x===quiz.p.c[0]&&y===quiz.p.c[1]){hi={c:[x,y],col:'#16a34a'};say(`✓ Yes! The ${quiz.p.n} is at <b>${ref(x,y)}</b>.`);quiz=null;}else{hi={c:[x,y]};say(`That's ${ref(x,y)}. Go across first, then up. Try again!`);}render();return;}
+  const p=at(x,y);hi={c:[x,y],col:'#2563eb'};say(`<b>${ref(x,y)}</b>`+(p?`: the ${p.n} ${p.e}`:': nothing here'));render();
+}
+function summ(){const out=[];for(let i=1;i<route.length;i++){const d=route[i].d;if(out.length&&out[out.length-1][0]===d)out[out.length-1][1]++;else out.push([d,1]);}return out.map(([d,n])=>`${n} ${DN[d]}`).join(', ');}
+function move(d){const [dx,dy]=DV[d],nx=walker.x+dx,ny=walker.y+dy;if(nx<0||ny<0||nx>=C||ny>=R){say('Oops! That would walk off the map.');return;}
+  if(!route.length)route.push({x:walker.x,y:walker.y});walker.x=nx;walker.y=ny;walker.f=DIRS.indexOf(d);route.push({x:nx,y:ny,d});
+  let s=`Walked 1 square ${DN[d]} to <b>${ref(nx,ny)}</b>.`;const p=at(nx,ny);if(p)s+=` You're at the ${p.n} ${p.e}.`;
+  if(quiz&&quiz.t==='walk'&&p===quiz.to){s=`🎉 You made it to the ${p.n}! Your route: ${summ()} (${route.length-1} squares).`;quiz=null;}
+  say(s);render();}
+document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>move(b.dataset.d));
+document.querySelectorAll('[data-turn]').forEach(b=>b.onclick=()=>{walker.f=(walker.f+ +b.dataset.turn+4)%4;say(`The walker turned a quarter turn ${+b.dataset.turn>0?'clockwise (right)':'anti-clockwise (left)'} and is now facing <b>${DN[DIRS[walker.f]]}</b>.`);render();});
+$('fwd').onclick=()=>move(DIRS[walker.f]);
+$('clrR').onclick=()=>{route=[];render();say('');};
+$('q1').onclick=()=>{const p=PLACES[Math.floor(Math.random()*PLACES.length)];quiz=null;hi={c:p.c,col:'#7c3aed'};render();say(`What is at <b>${ref(...p.c)}</b>?`);
+  const O=$('opts');O.innerHTML='';PLACES.slice().sort(()=>Math.random()-.5).slice(0,4).concat(p).filter((v,i,a)=>a.indexOf(v)===i).sort(()=>Math.random()-.5).forEach(q=>{const b=document.createElement('button');b.textContent=q.e+' '+q.n;b.onclick=()=>{if(q===p){say(`✓ Yes! The ${p.n} is at ${ref(...p.c)}.`);O.innerHTML='';}else{b.disabled=true;b.style.opacity=.3;say(`Not quite. Find column ${LET[p.c[0]]}, then go up to row ${p.c[1]+1}.`);}};O.appendChild(b);});};
+$('q2').onclick=()=>{$('opts').innerHTML='';const p=PLACES[Math.floor(Math.random()*PLACES.length)];quiz={t:'find',p};hi=null;render();say(`Tap the square with the <b>${p.n}</b> ${p.e}. What is its grid reference?`);};
+$('q3').onclick=()=>{$('opts').innerHTML='';const [a,b]=PLACES.slice().sort(()=>Math.random()-.5);walker={x:a.c[0],y:a.c[1],f:0};route=[];quiz={t:'walk',to:b};hi={c:b.c,col:'#16a34a'};render();
+  say(`Start at the ${a.n} ${a.e} (${ref(...a.c)}). Walk to the <b>${b.n}</b> ${b.e} (${ref(...b.c)}) using N, S, E and W.`);};
+say('Tap any square to see its grid reference.');render();
+</script></body></html>

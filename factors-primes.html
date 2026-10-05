@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Factors & Primes</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input{font:inherit;font-size:15px;padding:6px 11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input{width:74px;text-align:center;font-size:20px;font-weight:800}
+#say{font-size:20px;padding:8px 14px;min-height:46px;line-height:1.5}
+#grid{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;padding:10px;max-width:640px;margin:0 auto}
+.c{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:clamp(13px,2.4vw,20px);border:2px solid #e2e8f0;border-radius:8px;position:relative;background:#fff}
+.c.x{color:#94a3b8;background:#f1f5f9}
+.c.p{border-color:#16a34a;background:#dcfce7;border-radius:50%}
+.c .mark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(20px,4vw,34px);opacity:.55;pointer-events:none}
+svg{display:block;width:100%;height:auto;user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Factors & Primes</span>
+<button data-t="rect" class="on">Factor rectangles</button><button data-t="sieve">Prime number sieve</button>
+</div>
+<div class="bar" id="ctl"></div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 420"></svg>
+<div id="grid" style="display:none"></div>
+<div class="hint">Factor rectangles: every way to arrange the dots into a rectangle (array) gives a pair of factors. A prime number has only one rectangle: a single row. The sieve crosses out the multiples of 2, 3, 5 and 7, and the numbers left are the primes.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+let tab='rect',n=12,sieve={step:0,crossed:new Map(),primes:new Set()};
+const COLS={2:'#ef4444',3:'#3b82f6',5:'#f59e0b',7:'#a855f7'};
+function ctl(){
+  const C=$('ctl');
+  if(tab==='rect'){C.innerHTML='<button id="m">−</button><input id="nIn" type="number" min="1" max="100"><button id="p">+</button><button id="rnd">🎲 Random</button>';$('nIn').value=n;
+    $('m').onclick=()=>set(n-1);$('p').onclick=()=>set(n+1);$('nIn').onchange=e=>set(+e.target.value);$('rnd').onclick=()=>set(2+Math.floor(Math.random()*59));}
+  else{C.innerHTML='<button id="s1">1. Cross out 1</button><button data-p="2">2. Circle 2, cross out its multiples</button><button data-p="3">3. Circle 3…</button><button data-p="5">4. Circle 5…</button><button data-p="7">5. Circle 7…</button><button id="fin">6. Circle what\'s left</button><button id="rs">Reset</button>';
+    $('s1').onclick=()=>{sieve.crossed.set(1,'#64748b');drawSieve();say('1 is not prime and not composite: it has only one factor.');};
+    C.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{const p=+b.dataset.p;sieve.primes.add(p);let c=0;for(let m=p*2;m<=100;m+=p)if(!sieve.crossed.has(m)){sieve.crossed.set(m,COLS[p]);c++;}drawSieve();say(`${p} is prime. Crossing out the multiples of ${p} (${p*2}, ${p*3}, ${p*4}…). ${c} new numbers crossed out.`);});
+    $('fin').onclick=()=>{for(let i=2;i<=100;i++)if(!sieve.crossed.has(i))sieve.primes.add(i);drawSieve();say(`The circled numbers are the <b>${sieve.primes.size} prime numbers</b> up to 100. Every crossed-out number (except 1) is composite.`);};
+    $('rs').onclick=()=>{sieve={step:0,crossed:new Map(),primes:new Set()};drawSieve();say('Follow the steps in order.');};}
+}
+function set(v){n=Math.max(1,Math.min(100,Math.round(v)||1));if($('nIn'))$('nIn').value=n;drawRect();}
+function factors(v){const f=[];for(let i=1;i<=v;i++)if(v%i===0)f.push(i);return f;}
+function drawRect(){
+  svg.innerHTML='';const f=factors(n),pairs=f.filter(a=>a*a<=n).map(a=>[a,n/a]);
+  // lay out arrays: each array a rows x b cols
+  const maxB=Math.max(...pairs.map(p=>p[1])),boxW=Math.min(900/pairs.length-20,Math.max(120,1000/pairs.length));
+  let x=30,H=0;const items=[];
+  pairs.forEach(([a,b])=>{const d=Math.min(18,Math.max(4,(Math.min(boxW,420)-10)/b),260/a);items.push({a,b,d});});
+  const totalW=items.reduce((s,it)=>s+it.b*it.d+40,0),sc=Math.min(1,960/totalW);
+  x=(1000-totalW*sc)/2;
+  items.forEach(it=>{const d=it.d*sc,w=it.b*d,h=it.a*d;for(let r=0;r<it.a;r++)for(let c=0;c<it.b;c++)el('circle',{cx:x+c*d+d/2,cy:60+r*d+d/2,r:Math.max(1.5,d*0.38),fill:it.a===1?'#16a34a':'#3b82f6'},svg);
+    txt(svg,x+w/2,50,`${it.a} × ${it.b}`,16,'#111827','800');x+=w+40*sc;H=Math.max(H,h);});
+  svg.setAttribute('viewBox',`0 0 1000 ${Math.max(140,H+90)}`);
+  const kind=n===1?'neither prime nor composite (it has only 1 factor)':f.length===2?'<b style="color:#16a34a">prime</b>: it has exactly 2 factors, 1 and itself, so the only rectangle is one row':`<b style="color:#1d4ed8">composite</b>: it has ${f.length} factors`;
+  const sq=pairs.some(([a,b])=>a===b)?` ${n} is also a <b>square number</b> (${Math.sqrt(n)} × ${Math.sqrt(n)}).`:'';
+  say(`<b>${n}</b> can be made into ${pairs.length} different rectangle${pairs.length===1?'':'s'}. Factors of ${n}: <b>${f.join(', ')}</b>.<br>${n} is ${kind}.${sq}`);
+}
+function drawSieve(){
+  const G=$('grid');G.innerHTML='';for(let i=1;i<=100;i++){const d=document.createElement('div');d.className='c';d.textContent=i;
+    if(sieve.primes.has(i))d.classList.add('p');else if(sieve.crossed.has(i)){d.classList.add('x');const m=document.createElement('span');m.className='mark';m.textContent='✕';m.style.color=sieve.crossed.get(i);d.appendChild(m);}G.appendChild(d);}
+}
+function say(s){$('say').innerHTML=s;}
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b));
+  svg.style.display=tab==='rect'?'':'none';$('grid').style.display=tab==='sieve'?'grid':'none';ctl();if(tab==='rect')drawRect();else{drawSieve();say('Follow the steps in order to find all the prime numbers up to 100.');}});
+ctl();drawRect();
+</script></body></html>

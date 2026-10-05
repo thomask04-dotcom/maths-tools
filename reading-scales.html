@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reading Scales</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input,select{font:inherit;font-size:15px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input#ans{width:110px;font-size:18px;font-weight:700;text-align:center}
+input[type=range]{width:260px}
+#say{font-size:21px;padding:8px 14px;min-height:44px}
+#score{margin-left:auto;font-weight:700;font-size:18px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Reading Scales</span>
+<button data-i="ruler" class="on">📏 Ruler</button><button data-i="scale">⚖ Kitchen scales</button><button data-i="jug">🫗 Measuring jug</button><button data-i="therm">🌡 Thermometer</button>
+<span id="score"></span>
+</div>
+<div class="bar" id="opts"></div>
+<div class="bar">
+<button id="expBtn" class="on">Explore</button><button id="quizBtn">🎯 Read it!</button>
+<span id="expWrap"><input type="range" id="slider"></span>
+<span id="quizWrap" style="display:none"><input id="ans"> <span id="unit"></span> <button id="checkBtn">✓ Check</button> <button id="nextBtn">Next</button></span>
+</div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 420"></svg>
+<div class="hint">Before you read a scale, work out what each small mark is worth: count the marks between two numbers. On a ruler, measure from where the object starts. It doesn't have to start at 0, but then you need to count the gap.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+let inst='ruler',quiz=false,val=0,score=0,tries=0,cfg={ruler:{start:0,step:'mm'},scale:{max:1000},jug:{lab:100},therm:{}};
+const RNG={ruler:[5,140,1],scale:[0,1000,10],jug:[0,1000,10],therm:[-20,50,1]};
+function range(){if(inst==='scale')return [0,cfg.scale.max,cfg.scale.max>1000?100:10];if(inst==='ruler')return [5,Math.min(140,150-cfg.ruler.start*10),cfg.ruler.step==='cm'?10:cfg.ruler.step==='half'?5:1];return RNG[inst];}
+function unitTxt(){return {ruler:'cm',scale:cfg.scale.max>1000?'kg':'g',jug:'mL',therm:'°C'}[inst];}
+function fmtVal(v){if(inst==='ruler')return (v/10)+' cm'+(v%10?` (${v} mm)`:'');if(inst==='scale')return cfg.scale.max>1000?(v/1000)+' kg'+(v%1000?` (${v} g)`:''):v+' g';if(inst==='jug')return v+' mL';return (v<0?'−'+(-v):v)+' °C';}
+function opts(){
+  const O=$('opts');let h='';
+  if(inst==='ruler')h=`<label>Object starts at <select id="rs"><option value="0">0 cm</option><option value="2">2 cm</option><option value="3">3 cm</option><option value="rand">a random place</option></select></label><label>Lengths in <select id="rst"><option value="cm">whole cm</option><option value="half">half cm</option><option value="mm" selected>mm</option></select></label>`;
+  if(inst==='scale')h=`<label>Scale goes up to <select id="sm"><option value="1000">1 kg (1000 g)</option><option value="5000">5 kg</option></select></label>`;
+  if(inst==='jug')h=`<label>Numbers every <select id="jl"><option value="100">100 mL</option><option value="250">250 mL</option><option value="500">500 mL</option></select></label>`;
+  if(inst==='therm')h='<span>Temperatures below zero are negative numbers.</span>';
+  O.innerHTML=h;
+  if($('rs'))$('rs').onchange=e=>{cfg.ruler.startSel=e.target.value;cfg.ruler.start=e.target.value==='rand'?Math.floor(Math.random()*4):+e.target.value;setup();};
+  if($('rst'))$('rst').onchange=e=>{cfg.ruler.step=e.target.value;setup();};
+  if($('sm'))$('sm').onchange=e=>{cfg.scale.max=+e.target.value;setup();};
+  if($('jl'))$('jl').onchange=e=>{cfg.jug.lab=+e.target.value;setup();};
+  if($('rst'))$('rst').value=cfg.ruler.step;if($('sm'))$('sm').value=cfg.scale.max;if($('jl'))$('jl').value=cfg.jug.lab;
+}
+function draw(){
+  svg.innerHTML='';
+  if(inst==='ruler'){
+    const X0=60,MM=5.6,Y=250;// 1 mm = 5.6 px -> 15 cm = 840px
+    el('rect',{x:X0-20,y:Y,width:150*MM+40,height:80,rx:6,fill:'#fef9c3',stroke:'#a16207','stroke-width':2},svg);
+    for(let m=0;m<=150;m++){const x=X0+m*MM,h=m%10===0?30:m%5===0?20:11;el('line',{x1:x,x2:x,y1:Y,y2:Y+h,stroke:'#1f2937','stroke-width':m%10===0?2:1},svg);if(m%10===0)txt(svg,x,Y+50,String(m/10),16,'#111827','700');}
+    txt(svg,X0+150*MM+8,Y+70,'cm',13,'#475569','normal','end');
+    const s=cfg.ruler.start*10,xs=X0+s*MM,xe=X0+(s+val)*MM,y=Y-60;
+    // crayon-like object
+    el('rect',{x:xs,y,width:Math.max(0,xe-xs-26),height:40,rx:4,fill:'#3b82f6',stroke:'#1e3a8a','stroke-width':2},svg);
+    el('polygon',{points:`${xe-26},${y} ${xe},${y+20} ${xe-26},${y+40}`,fill:'#60a5fa',stroke:'#1e3a8a','stroke-width':2},svg);
+    el('line',{x1:xs,x2:xs,y1:y-10,y2:Y+4,stroke:'#dc2626','stroke-width':1.5,'stroke-dasharray':'4 3'},svg);el('line',{x1:xe,x2:xe,y1:y-10,y2:Y+4,stroke:'#dc2626','stroke-width':1.5,'stroke-dasharray':'4 3'},svg);
+  }
+  if(inst==='scale'){
+    const cx=500,cy=230,R=170,max=cfg.scale.max,big=max>1000;
+    el('rect',{x:cx-230,y:cy+120,width:460,height:50,rx:12,fill:'#94a3b8'},svg);el('ellipse',{cx,cy:cy-200,rx:190,ry:22,fill:'#cbd5e1',stroke:'#64748b','stroke-width':3},svg);el('rect',{x:cx-14,y:cy-190,width:28,height:30,fill:'#64748b'},svg);
+    el('circle',{cx,cy,r:R+18,fill:'#e2e8f0',stroke:'#475569','stroke-width':6},svg);el('circle',{cx,cy,r:R,fill:'#fff'},svg);
+    const minor=big?100:10,major=big?1000:100,mid=big?500:50;
+    for(let v=0;v<max;v+=minor){const a=(v/max)*2*Math.PI-Math.PI/2,L=v%major===0?24:v%mid===0?16:8;el('line',{x1:cx+R*Math.cos(a),y1:cy+R*Math.sin(a),x2:cx+(R-L)*Math.cos(a),y2:cy+(R-L)*Math.sin(a),stroke:'#1f2937','stroke-width':v%major===0?3:1.5},svg);
+      if(v%major===0)txt(svg,cx+(R-46)*Math.cos(a),cy+(R-46)*Math.sin(a)+7,big?String(v/1000):String(v),20,'#111827','800');}
+    txt(svg,cx,cy+60,big?'kg':'grams',18,'#475569','700');
+    const a=(val/max)*2*Math.PI-Math.PI/2;el('line',{x1:cx,y1:cy,x2:cx+(R-12)*Math.cos(a),y2:cy+(R-12)*Math.sin(a),stroke:'#dc2626','stroke-width':5,'stroke-linecap':'round'},svg);el('circle',{cx,cy,r:10,fill:'#dc2626'},svg);
+  }
+  if(inst==='jug'){
+    const x=380,top=40,bot=380,W=240,H=bot-top,lab=cfg.jug.lab;
+    const lvl=bot-(val/1000)*H;
+    el('rect',{x,y:lvl,width:W,height:bot-lvl,fill:'#7dd3fc',opacity:.85},svg);
+    el('path',{d:`M${x} ${top-20} V${bot} H${x+W} V${top-20}`,fill:'none',stroke:'#475569','stroke-width':5},svg);
+    el('path',{d:`M${x+W} ${top+30} q70 10 60 90 q-8 60 -60 70`,fill:'none',stroke:'#475569','stroke-width':6},svg);
+    for(let v=0;v<=1000;v+=50){const y=bot-(v/1000)*H,isL=v%lab===0;el('line',{x1:x,x2:x+(isL?50:28),y1:y,y2:y,stroke:'#1f2937','stroke-width':isL?3:1.5},svg);if(isL&&v)txt(svg,x+58,y+6,v===1000?'1 L':String(v),16,'#111827','700','start');}
+    txt(svg,x-14,bot+4,'mL',14,'#475569','700','end');
+  }
+  if(inst==='therm'){
+    const x=500,top=40,bot=360,lo=-20,hi=50,H=bot-top,y=v=>bot-(v-lo)/(hi-lo)*H;
+    el('rect',{x:x-18,y:top-10,width:36,height:H+30,rx:18,fill:'#fff',stroke:'#475569','stroke-width':3},svg);el('circle',{cx:x,cy:bot+40,r:30,fill:'#ef4444',stroke:'#475569','stroke-width':3},svg);
+    el('rect',{x:x-8,y:y(val),width:16,height:bot+20-y(val),fill:'#ef4444'},svg);
+    for(let v=lo;v<=hi;v++){const yy=y(v),L=v%10===0?30:v%5===0?20:10;el('line',{x1:x+22,x2:x+22+L,y1:yy,y2:yy,stroke:'#1f2937','stroke-width':v%10===0?2.5:1},svg);if(v%10===0)txt(svg,x+60,yy+6,v<0?'−'+(-v):String(v),17,v<0?'#1d4ed8':'#111827','800','start');}
+    el('line',{x1:x-60,x2:x+22,y1:y(0),y2:y(0),stroke:'#1d4ed8','stroke-width':1.5,'stroke-dasharray':'5 4'},svg);txt(svg,x-66,y(0)+5,'0 °C',15,'#1d4ed8','700','end');
+  }
+  if(!quiz)$('say').innerHTML=`It shows <b>${fmtVal(val)}</b>.`;
+}
+function setup(){
+  const [lo,hi,st]=range(),s=$('slider');s.min=lo;s.max=hi;s.step=st;if(!(val>=lo&&val<=hi))val=lo+Math.round((hi-lo)/2/st)*st;s.value=val;
+  $('unit').textContent=inst==='ruler'?'cm':inst==='scale'?(cfg.scale.max>1000?'g':'g'):inst==='jug'?'mL':'°C';
+  if(quiz)newQ();else draw();
+}
+function newQ(){const [lo,hi,st]=range();let v;do{v=lo+st*Math.floor(Math.random()*((hi-lo)/st+1));}while(v===val||(inst==='scale'&&v===0));
+  if(inst==='ruler'&&cfg.ruler.startSel==='rand')cfg.ruler.start=Math.floor(Math.random()*4);
+  val=v;tries=0;$('ans').value='';draw();$('say').innerHTML=inst==='ruler'?'How long is the crayon?':inst==='scale'?'How heavy is it? Answer in grams.':inst==='jug'?'How much water is in the jug?':'What temperature is it?';$('ans').focus();}
+function check(){
+  const raw=$('ans').value.trim().replace(/[−–]/g,'-').replace(/[a-z°\s]/gi,'');if(raw===''||isNaN(+raw)){$('say').textContent='Type a number.';return;}
+  let a=+raw;if(inst==='ruler')a=Math.round(a*10);
+  const ok=Math.abs(a-val)<1e-6;tries++;
+  if(ok){score++;$('score').textContent='⭐ '+score;$('say').innerHTML=`✓ Correct! It's <b>${fmtVal(val)}</b>.`;}
+  else{let h='✗ Not quite. ';
+    if(inst==='ruler'&&cfg.ruler.start&&Math.abs(a-(val+cfg.ruler.start*10))<1e-6)h+='You read where it ends. It starts at '+cfg.ruler.start+' cm, not 0!';
+    else if(inst==='scale')h+=`Each small mark is ${cfg.scale.max>1000?100:10} g.`;
+    else if(inst==='jug')h+='Each small mark is 50 mL.';
+    else if(inst==='therm'&&a===-val)h+='Check: is it above or below zero?';
+    else h+='Count the small marks carefully.';
+    if(tries>=2)h+=` The answer is ${fmtVal(val)}.`;$('say').innerHTML=h;}
+}
+$('slider').oninput=e=>{val=+e.target.value;draw();};
+$('checkBtn').onclick=check;$('nextBtn').onclick=newQ;$('ans').addEventListener('keydown',e=>{if(e.key==='Enter')check();});
+$('expBtn').onclick=()=>{quiz=false;$('expBtn').classList.add('on');$('quizBtn').classList.remove('on');$('expWrap').style.display='';$('quizWrap').style.display='none';setup();};
+$('quizBtn').onclick=()=>{quiz=true;$('quizBtn').classList.add('on');$('expBtn').classList.remove('on');$('expWrap').style.display='none';$('quizWrap').style.display='';setup();};
+document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{inst=b.dataset.i;document.querySelectorAll('[data-i]').forEach(x=>x.classList.toggle('on',x===b));opts();val=NaN;setup();});
+opts();val=73;setup();
+</script></body></html>

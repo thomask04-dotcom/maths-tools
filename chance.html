@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chance Experiments</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input{font:inherit;font-size:15px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.run{font-weight:700;background:#16a34a;border-color:#16a34a;color:#fff}
+.run:hover{background:#15803d}
+#spinCfg{display:none;gap:6px;align-items:center}
+#spinCfg input{width:44px;padding:5px;text-align:center}
+.cdot{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle}
+.wrap{display:flex;flex-wrap:wrap;gap:12px;padding:10px}
+#stage{flex:0 0 340px;max-width:100%}
+#results{flex:1;min-width:300px}
+table{border-collapse:collapse;width:100%;font-size:15px;margin-top:8px}
+th,td{border:1px solid #e5e7eb;padding:5px 8px;text-align:center}
+th{background:#f1f5f9}
+#last{font-size:22px;font-weight:700;text-align:center;min-height:30px}
+svg{display:block;width:100%;height:auto;user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Chance Experiments</span>
+<button data-e="coin" class="on">🪙 Coin</button><button data-e="die">🎲 One die</button><button data-e="dice2">🎲🎲 Two dice (total)</button><button data-e="spin">🎡 Spinner</button>
+<span id="spinCfg">Sections:
+<span class="cdot" style="background:#ef4444"></span><input type="number" min="0" max="8" value="1" data-i="0">
+<span class="cdot" style="background:#3b82f6"></span><input type="number" min="0" max="8" value="1" data-i="1">
+<span class="cdot" style="background:#22c55e"></span><input type="number" min="0" max="8" value="1" data-i="2">
+<span class="cdot" style="background:#facc15"></span><input type="number" min="0" max="8" value="1" data-i="3">
+</span>
+</div>
+<div class="bar">
+<button class="run" data-n="1">Go ×1</button><button class="run" data-n="10">×10</button><button class="run" data-n="100">×100</button><button class="run" data-n="1000">×1000</button>
+<button id="resetBtn">Reset results</button>
+<button id="expBtn">Show expected</button>
+<button id="pctBtn">Show as %</button>
+<button id="probBtn">Probability (0 to 1)</button>
+</div>
+<div class="wrap">
+<div id="stage"><svg id="svg" viewBox="0 0 340 300"></svg><div id="last"></div></div>
+<div id="results"><svg id="chart" viewBox="0 0 560 280"></svg><table id="tbl"></table></div>
+</div>
+<div class="hint">Predict first: which result will happen most often? Then run the experiment. Try ×10 and then ×1000. The more trials you run, the closer the results get to what's expected.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),chart=$('chart');
+const SC=['#ef4444','#3b82f6','#22c55e','#facc15'],SN=['Red','Blue','Green','Yellow'];
+let showProb=false,exp='coin',counts={},trials=0,showExp=false,pct=false,last=null,spinSec=[1,1,1,1],spinAng=0;
+function outcomes(){
+  if(exp==='coin')return [['H','Heads',1/2],['T','Tails',1/2]];
+  if(exp==='die')return [1,2,3,4,5,6].map(v=>[v,String(v),1/6]);
+  if(exp==='dice2')return Array.from({length:11},(_,i)=>{const s=i+2;return [s,String(s),(6-Math.abs(s-7))/36];});
+  const tot=spinSec.reduce((a,b)=>a+b,0);return SC.map((c,i)=>[i,SN[i],spinSec[i]/tot]).filter(o=>o[2]>0);
+}
+function roll(){
+  if(exp==='coin')return Math.random()<.5?'H':'T';
+  if(exp==='die')return 1+Math.floor(Math.random()*6);
+  if(exp==='dice2'){const a=1+Math.floor(Math.random()*6),b=1+Math.floor(Math.random()*6);last={a,b};return a+b;}
+  const tot=spinSec.reduce((a,b)=>a+b,0),k=Math.floor(Math.random()*tot);let acc=0;
+  const secs=[];spinSec.forEach((n,i)=>{for(let j=0;j<n;j++)secs.push(i);});
+  spinAng=(k+0.2+Math.random()*0.6)/tot*360;return secs[k];
+}
+function pip(g,cx,cy,v,s){const P={1:[[0,0]],2:[[-1,-1],[1,1]],3:[[-1,-1],[0,0],[1,1]],4:[[-1,-1],[1,-1],[-1,1],[1,1]],5:[[-1,-1],[1,-1],[0,0],[-1,1],[1,1]],6:[[-1,-1],[1,-1],[-1,0],[1,0],[-1,1],[1,1]]};
+  el('rect',{x:cx-s,y:cy-s,width:2*s,height:2*s,rx:s*0.25,fill:'#fff',stroke:'#1f2937','stroke-width':3},g);P[v].forEach(([x,y])=>el('circle',{cx:cx+x*s*0.5,cy:cy+y*s*0.5,r:s*0.14,fill:'#1f2937'},g));}
+function drawStage(v){
+  svg.innerHTML='';
+  if(exp==='coin'){const h=v!=='T';el('circle',{cx:170,cy:140,r:100,fill:h?'#fcd34d':'#d1d5db',stroke:h?'#b45309':'#6b7280','stroke-width':6},svg);txt(svg,170,165,v===null?'?':h?'H':'T',80,h?'#92400e':'#374151','800');txt(svg,170,275,v===null?'':h?'Heads':'Tails',24,'#374151','700');}
+  else if(exp==='die')pip(svg,170,140,v||6,80);
+  else if(exp==='dice2'){pip(svg,90,130,last?last.a:3,60);pip(svg,250,130,last?last.b:4,60);if(last)txt(svg,170,260,`${last.a} + ${last.b} = ${last.a+last.b}`,28,'#1f2937','800');}
+  else{
+    const tot=spinSec.reduce((a,b)=>a+b,0);let k=0;const cx=170,cy=150,r=125;
+    spinSec.forEach((n,i)=>{for(let j=0;j<n;j++){const a1=(k/tot)*2*Math.PI-Math.PI/2,a2=((k+1)/tot)*2*Math.PI-Math.PI/2;
+      el('path',{d:tot===1?`M${cx-r} ${cy}a${r} ${r} 0 1 0 ${2*r} 0a${r} ${r} 0 1 0 ${-2*r} 0`:`M${cx} ${cy}L${cx+r*Math.cos(a1)} ${cy+r*Math.sin(a1)}A${r} ${r} 0 ${a2-a1>Math.PI?1:0} 1 ${cx+r*Math.cos(a2)} ${cy+r*Math.sin(a2)}Z`,fill:SC[i],stroke:'#fff','stroke-width':3},svg);k++;}});
+    const a=spinAng*Math.PI/180-Math.PI/2;
+    el('line',{x1:cx,y1:cy,x2:cx+r*0.85*Math.cos(a),y2:cy+r*0.85*Math.sin(a),stroke:'#111827','stroke-width':7,'stroke-linecap':'round'},svg);
+    el('circle',{cx,cy,r:12,fill:'#111827'},svg);
+  }
+}
+function drawResults(){
+  chart.innerHTML='';const O=outcomes(),n=O.length,W=520,H=210,x0=34,bw=W/n;
+  const maxV=Math.max(1,...O.map(o=>pct?(trials?(counts[o[0]]||0)/trials*100:0):(counts[o[0]]||0)),...(showExp?O.map(o=>pct?o[2]*100:o[2]*trials):[0]));
+  for(let i=0;i<=4;i++){const y=20+H-H*i/4;el('line',{x1:x0,x2:x0+W,y1:y,y2:y,stroke:'#e5e7eb'},chart);txt(chart,x0-6,y+4,String(Math.round(maxV*i/4))+(pct?'%':''),11,'#64748b').setAttribute('text-anchor','end');}
+  O.forEach((o,i)=>{
+    const c=counts[o[0]]||0,v=pct?(trials?c/trials*100:0):c,h=v/maxV*H,x=x0+i*bw+bw*0.15,w=bw*0.7;
+    el('rect',{x,y:20+H-h,width:w,height:h,fill:exp==='spin'?SC[o[0]]:'#6366f1',rx:3},chart);
+    if(showExp){const ev=pct?o[2]*100:o[2]*trials,y=20+H-ev/maxV*H;el('line',{x1:x-4,x2:x+w+4,y1:y,y2:y,stroke:'#111827','stroke-width':3,'stroke-dasharray':'5 3'},chart);}
+    txt(chart,x+w/2,20+H+18,o[1],n>8?11:13,'#1f2937','600');
+  });
+  txt(chart,x0+W/2,275,`Trials: ${trials}`,14,'#475569','700');
+  let t='<tr><th>Outcome</th><th>Tally</th><th>Count</th><th>Fraction</th>'+(showExp?'<th>Expected</th>':'')+(showProb?'<th>Probability</th>':'')+'</tr>';
+  O.forEach(o=>{const c=counts[o[0]]||0;const tally=c<=30?('<s>||||</s> '.repeat(Math.floor(c/5))+'|'.repeat(c%5)):'many!';
+    t+=`<tr><td>${o[1]}</td><td style="text-align:left">${tally}</td><td>${c}</td><td>${trials?c+'/'+trials+(pct?' ≈ '+Math.round(c/trials*100)+'%':''):'-'}</td>${showExp?`<td>${pct?Math.round(o[2]*100)+'%':(Math.round(o[2]*trials*10)/10)}</td>`:''}${showProb?`<td>${toFrac(o[2])} = ${Math.round(o[2]*100)/100} = ${Math.round(o[2]*1000)/10}%</td>`:''}</tr>`;});
+  $('tbl').innerHTML=t;
+  document.querySelectorAll('#pscale').forEach(e=>e.remove());
+  if(showProb){const O=outcomes(),y=0;let h='<div style="margin-top:10px;font-weight:700">Probability scale</div><svg viewBox="0 0 560 90" style="width:100%">';
+    h+='<line x1="30" x2="530" y1="40" y2="40" stroke="#1f2937" stroke-width="2"/>';
+    [[0,'0','impossible'],[0.5,'½','even chance'],[1,'1','certain']].forEach(([v,a,b])=>{const x=30+v*500;h+=`<line x1="${x}" x2="${x}" y1="32" y2="48" stroke="#1f2937" stroke-width="2"/><text x="${x}" y="68" font-size="14" text-anchor="middle" font-weight="700">${a}</text><text x="${x}" y="84" font-size="11" text-anchor="middle" fill="#64748b">${b}</text>`;});
+    O.forEach((o,i)=>{const x=30+o[2]*500;h+=`<circle cx="${x}" cy="${26-(i%3)*9}" r="6" fill="${exp==='spin'?SC[o[0]]:'#6366f1'}" stroke="#1f2937"/>`;});
+    h+='</svg><div style="font-size:14px;color:#475569">All the probabilities add up to 1.</div>';$('tbl').insertAdjacentHTML('afterend','<div id="pscale">'+h+'</div>');}
+}
+function run(n){for(let i=0;i<n;i++){const v=roll();counts[v]=(counts[v]||0)+1;trials++;if(i===n-1){drawStage(v);$('last').textContent=n===1?'Result: '+(outcomes().find(o=>o[0]===v)||[0,v])[1]:`Ran ${n} trials`;}}drawResults();}
+function reset(){counts={};trials=0;last=null;$('last').textContent='';drawStage(null);drawResults();}
+document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{exp=b.dataset.e;document.querySelectorAll('[data-e]').forEach(x=>x.classList.toggle('on',x===b));$('spinCfg').style.display=exp==='spin'?'flex':'none';reset();});
+document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>run(+b.dataset.n));
+document.querySelectorAll('#spinCfg input').forEach(inp=>inp.onchange=()=>{let v=Math.max(0,Math.min(8,Math.round(+inp.value||0)));inp.value=v;spinSec[+inp.dataset.i]=v;if(spinSec.every(x=>!x)){spinSec[0]=1;document.querySelector('#spinCfg input').value=1;}reset();});
+$('resetBtn').onclick=reset;
+function toFrac(p){for(let d=1;d<=36;d++){const n=Math.round(p*d);if(Math.abs(n/d-p)<1e-9){return n+'/'+d;}}return p.toFixed(2);}
+$('probBtn').onclick=e=>{showProb=!showProb;e.target.classList.toggle('on',showProb);drawResults();};
+$('expBtn').onclick=e=>{showExp=!showExp;e.target.classList.toggle('on',showExp);drawResults();};
+$('pctBtn').onclick=e=>{pct=!pct;e.target.classList.toggle('on',pct);drawResults();};
+reset();
+</script></body></html>

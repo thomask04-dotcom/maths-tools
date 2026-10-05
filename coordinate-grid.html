@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coordinate Grid</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input{font:inherit;font-size:15px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input{width:120px}
+.wrap{display:flex;flex-wrap:wrap;gap:14px;padding:10px;align-items:flex-start}
+svg{width:100%;max-width:560px;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+#side{flex:1;min-width:240px;font-size:17px}
+#task{background:#fef9c3;border-radius:10px;padding:10px;display:none;margin-bottom:10px;font-size:19px}
+#fb{font-weight:700}
+#list{line-height:1.8}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Coordinate Grid</span>
+<button data-q="1">First quadrant</button><button data-q="4" class="on">All four quadrants</button>
+<button id="joinBtn">Join points</button>
+<button id="undoBtn">Undo</button>
+<button id="clearBtn">Clear</button>
+<button id="coordBtn" class="on">Show coordinates</button>
+</div>
+<div class="bar">
+<button id="plotBtn">🎯 Plot the point</button>
+<button id="nameBtn">❓ Name the point</button>
+</div>
+<div class="wrap">
+<svg id="svg" viewBox="0 0 560 560"></svg>
+<div id="side"><div id="task"><div id="taskText"></div><div id="inWrap" style="margin-top:8px;display:none">( <input id="ans" placeholder="x, y"> ) <button id="checkBtn">✓ Check</button></div><div id="fb"></div></div><div id="list"></div></div>
+</div>
+<div class="hint">Tap where the grid lines cross to plot a point. Points are labelled A, B, C and so on. Coordinates are written (x, y): go across first, then up or down. "Join points" joins them in order to make a shape.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+let quad=4,pts=[],join=false,showC=true,task=null;
+function range(){return quad===4?[-8,8]:[0,10];}
+function geo(){const [lo,hi]=range(),n=hi-lo,S=480/n,M=46;return {lo,hi,S,M,X:x=>M+(x-lo)*S,Y:y=>M+(hi-y)*S};}
+const fmt=v=>v<0?'−'+(-v):String(v);
+function render(){
+  svg.innerHTML='';const g=geo(),{lo,hi,X,Y}=g;
+  el('rect',{x:0,y:0,width:560,height:560,fill:'#fff'},svg);
+  for(let v=lo;v<=hi;v++){el('line',{x1:X(v),x2:X(v),y1:Y(lo),y2:Y(hi),stroke:v===0?'#111827':'#cbd5e1','stroke-width':v===0?2.5:1},svg);el('line',{x1:X(lo),x2:X(hi),y1:Y(v),y2:Y(v),stroke:v===0?'#111827':'#cbd5e1','stroke-width':v===0?2.5:1},svg);
+    if(v!==0||quad===1){txt(svg,X(v),Y(Math.max(lo,0))+(quad===1?22:18),fmt(v),12,'#475569');if(v!==0)txt(svg,X(Math.max(lo,0))-(quad===1?10:8),Y(v)+4,fmt(v),12,'#475569','normal','end');}}
+  txt(svg,X(hi)+14,Y(0)+5,'x',18,'#111827','800');txt(svg,X(0),Y(hi)-12,'y',18,'#111827','800');
+  if(join&&pts.length>1)el('polygon',{points:pts.map(p=>`${X(p.x)},${Y(p.y)}`).join(' '),fill:pts.length>2?'#bfdbfe':'none','fill-opacity':.5,stroke:'#2563eb','stroke-width':3},svg);
+  pts.forEach((p,i)=>{el('circle',{cx:X(p.x),cy:Y(p.y),r:7,fill:p.c||'#dc2626',stroke:'#fff','stroke-width':2},svg);
+    if(p.lbl!==false)txt(svg,X(p.x)+10,Y(p.y)-10,(p.name||String.fromCharCode(65+i))+(showC?` (${fmt(p.x)}, ${fmt(p.y)})`:''),14,'#111827','700','start');});
+  const hit=el('rect',{x:0,y:0,width:560,height:560,fill:'transparent',style:'cursor:crosshair'},svg);
+  hit.addEventListener('pointerdown',e=>{const p=pt(svg,e),x=Math.round((p.x-g.M)/g.S+lo),y=Math.round(hi-(p.y-g.M)/g.S);if(x<lo||x>hi||y<lo||y>hi)return;tap(x,y);});
+  $('list').innerHTML=task?'':pts.map((p,i)=>`<b>${String.fromCharCode(65+i)}</b> = (${fmt(p.x)}, ${fmt(p.y)})`).join('<br>');
+}
+function tap(x,y){
+  if(task&&task.type==='plot'){
+    const ok=x===task.x&&y===task.y;pts=[{x,y,c:ok?'#16a34a':'#dc2626',name:ok?'✓':'✗',lbl:true}];
+    $('fb').innerHTML=ok?'✓ Correct!':`✗ That point is (${fmt(x)}, ${fmt(y)}). Remember: across first (x), then up or down (y).`;$('fb').style.color=ok?'#15803d':'#b91c1c';
+    if(ok)setTimeout(plotTask,1500);render();return;}
+  if(task)return;
+  const i=pts.findIndex(p=>p.x===x&&p.y===y);if(i>=0)pts.splice(i,1);else if(pts.length<26)pts.push({x,y});render();
+}
+function rnd(){const [lo,hi]=range();return lo+Math.floor(Math.random()*(hi-lo+1));}
+function plotTask(){task={type:'plot',x:rnd(),y:rnd()};pts=[];$('task').style.display='block';$('inWrap').style.display='none';$('fb').textContent='';$('taskText').innerHTML=`Plot the point <b>(${fmt(task.x)}, ${fmt(task.y)})</b>`;render();}
+function nameTask(){task={type:'name',x:rnd(),y:rnd()};pts=[{x:task.x,y:task.y,name:'P',lbl:true,c:'#7c3aed'}];showC=false;$('coordBtn').classList.remove('on');
+  $('task').style.display='block';$('inWrap').style.display='';$('fb').textContent='';$('ans').value='';$('taskText').innerHTML='What are the coordinates of point <b>P</b>?';render();$('ans').focus();}
+$('checkBtn').onclick=()=>{
+  const m=$('ans').value.replace(/[()\s]/g,'').replace(/[−–]/g,'-').split(/[,;]/);
+  if(m.length!==2||m.some(v=>v===''||isNaN(+v))){$('fb').textContent='Type it like 3, -2';$('fb').style.color='#92400e';return;}
+  const [x,y]=m.map(Number);
+  if(x===task.x&&y===task.y){$('fb').textContent='✓ Correct!';$('fb').style.color='#15803d';setTimeout(nameTask,1400);}
+  else if(x===task.y&&y===task.x){$('fb').textContent='✗ Close! You swapped them. x (across) comes first.';$('fb').style.color='#b91c1c';}
+  else{$('fb').textContent='✗ Not quite. Count across from 0, then up or down.';$('fb').style.color='#b91c1c';}
+};
+$('ans').addEventListener('keydown',e=>{if(e.key==='Enter')$('checkBtn').click();});
+function endTask(){task=null;$('task').style.display='none';pts=[];}
+$('plotBtn').onclick=plotTask;$('nameBtn').onclick=nameTask;
+document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{quad=+b.dataset.q;document.querySelectorAll('[data-q]').forEach(x=>x.classList.toggle('on',x===b));const t=task&&task.type;endTask();if(t==='plot')plotTask();else if(t==='name')nameTask();else render();});
+$('joinBtn').onclick=e=>{join=!join;e.target.classList.toggle('on',join);render();};
+$('undoBtn').onclick=()=>{if(!task){pts.pop();render();}};
+$('clearBtn').onclick=()=>{endTask();render();};
+$('coordBtn').onclick=e=>{showC=!showC;e.target.classList.toggle('on',showC);render();};
+render();
+</script></body></html>

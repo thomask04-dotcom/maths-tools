@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Area Model</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:14px}
+.title{font-weight:700;margin-right:6px;font-size:16px}
+button,input{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input{width:70px;font-size:16px;font-weight:600;text-align:center}
+.x{font-size:18px;font-weight:700}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+#eq{font-size:20px;padding:6px 14px 2px;line-height:1.6}
+#eq .q{color:#dc2626;font-weight:700}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Area Model</span>
+<input id="a" type="number" min="1" max="999" value="23"><span class="x">×</span><input id="b" type="number" min="1" max="999" value="14">
+<button id="pvBtn">Split by place value</button>
+<button id="noBtn">No splits</button>
+<button id="addA">+ Split top</button>
+<button id="addB">+ Split side</button>
+</div>
+<div class="bar">
+<button id="prodBtn" class="on">Show products</button>
+<button id="gridBtn">Show unit squares</button>
+<button id="scaleBtn" class="on">Draw to scale</button>
+</div>
+<svg id="svg" viewBox="0 0 1000 520"></svg>
+<div id="eq"></div>
+<div class="hint">Drag the ▼ and ▶ handles to move a split, or drag a handle off the end to remove it. When products are hidden, tap a "?" to reveal it. Turn off "Draw to scale" so small parts are easier to read.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,anchor,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+const X0=150,Y0=80,MW=780,MH=400;
+const ROWC=['#dbeafe','#dcfce7','#fef3c7','#fce7f3','#ede9fe','#cffafe'];
+const EDGE=['#1d4ed8','#15803d','#b45309','#be185d','#6d28d9','#0e7490'];
+let A=23,B=14,sA=[],sB=[],showP=true,grid=false,scale=true,rev=new Set(),drag=null;
+function fmt(v){const t=String(v);return t.length>4?t.replace(/\B(?=(\d{3})+(?!\d))/g,' '):t;}
+function pv(v){const s=[];let acc=0;const d=String(v);for(let i=0;i<d.length-1;i++){acc+=(+d[i])*10**(d.length-1-i);if(+d[i])s.push(acc);}return s;}
+function parts(v,s){const e=[0,...s,v];return e.slice(1).map((x,i)=>x-e[i]);}
+// map value->pixel along a side. Not-to-scale mode gives each part equal room.
+function mapper(v,s,len){
+  if(scale)return x=>x/v*len;
+  const e=[0,...s,v],k=e.length-1;
+  return x=>{for(let i=0;i<k;i++)if(x<=e[i+1]){return (i+(x-e[i])/(e[i+1]-e[i]))*len/k;}return len;};
+}
+function sizes(){if(!scale)return [MW,MH];const s=Math.min(MW/A,MH/B);return [A*s,B*s];}
+function render(){
+  svg.innerHTML='';
+  el('rect',{x:0,y:0,width:1000,height:520,fill:'#fff'},svg);
+  const [W,H]=sizes(),fx=mapper(A,sA,W),fy=mapper(B,sB,H);
+  const eA=[0,...sA,A],eB=[0,...sB,B],pA=parts(A,sA),pB=parts(B,sB);
+  pB.forEach((h,r)=>pA.forEach((w,c)=>{
+    const x=X0+fx(eA[c]),y=Y0+fy(eB[r]),cw=fx(eA[c+1])-fx(eA[c]),ch=fy(eB[r+1])-fy(eB[r]),key=r+','+c;
+    const g=el('g',{},svg);
+    el('rect',{x,y,width:cw,height:ch,fill:ROWC[(r+c)%ROWC.length],stroke:'#334155','stroke-width':2},g);
+    if(grid&&scale&&cw/w>=5){let d='';const u=cw/w;for(let i=1;i<w;i++)d+=`M${x+i*u} ${y}v${ch}`;for(let j=1;j<h;j++)d+=`M${x} ${y+j*u}h${cw}`;el('path',{d,stroke:'#334155','stroke-opacity':.25,'stroke-width':.8,fill:'none','pointer-events':'none'},g);}
+    const fs=Math.max(10,Math.min(22,cw/7,ch/2.6));
+    if(cw<24||ch<18)return;
+    if(showP||rev.has(key)){
+      if(ch>=fs*2.6){txt(g,x+cw/2,y+ch/2-fs*0.25,`${fmt(w)} × ${fmt(h)}`,fs*0.8,'#374151');txt(g,x+cw/2,y+ch/2+fs*0.95,'= '+fmt(w*h),fs,'#111827','middle','700');}
+      else txt(g,x+cw/2,y+ch/2+fs*0.35,fmt(w*h),fs,'#111827','middle','700');
+    } else {
+      txt(g,x+cw/2,y+ch/2+fs*0.35,`${fmt(w)} × ${fmt(h)}`,fs*0.8,'#374151');
+      const bx=el('g',{style:'cursor:pointer'},g);
+      el('rect',{x:x+cw-26,y:y+4,width:22,height:22,rx:5,fill:'#fff',stroke:'#dc2626','stroke-dasharray':'3 2'},bx);
+      txt(bx,x+cw-15,y+20,'?',15,'#dc2626','middle','700');
+      bx.addEventListener('pointerdown',e=>{e.stopPropagation();rev.add(key);render();});
+    }
+  }));
+  // side labels
+  pA.forEach((w,c)=>{const x1=X0+fx(eA[c]),x2=X0+fx(eA[c+1]);el('line',{x1:x1+3,x2:x2-3,y1:Y0-24,y2:Y0-24,stroke:EDGE[c%6],'stroke-width':3},svg);txt(svg,(x1+x2)/2,Y0-32,fmt(w),x2-x1<30?12:17,EDGE[c%6],'middle','700');});
+  pB.forEach((h,r)=>{const y1=Y0+fy(eB[r]),y2=Y0+fy(eB[r+1]);el('line',{x1:X0-24,x2:X0-24,y1:y1+3,y2:y2-3,stroke:EDGE[r%6],'stroke-width':3},svg);txt(svg,X0-32,(y1+y2)/2+6,fmt(h),y2-y1<20?12:17,EDGE[r%6],'end','700');});
+  txt(svg,X0+W/2,24,fmt(A),15,'#64748b');txt(svg,24,Y0+H/2+5,fmt(B),15,'#64748b');
+  // handles
+  sA.forEach((v,k)=>{const x=X0+fx(v),h=el('polygon',{points:`${x-10},${Y0-16} ${x+10},${Y0-16} ${x},${Y0-2}`,fill:'#dc2626',style:'cursor:ew-resize'},svg);h.addEventListener('pointerdown',e=>startDrag('A',k,e));});
+  sB.forEach((v,k)=>{const y=Y0+fy(v),h=el('polygon',{points:`${X0-16},${y-10} ${X0-16},${y+10} ${X0-2},${y}`,fill:'#dc2626',style:'cursor:ns-resize'},svg);h.addEventListener('pointerdown',e=>startDrag('B',k,e));});
+  // equation
+  const prods=[];pB.forEach((h,r)=>pA.forEach((w,c)=>prods.push(showP||rev.has(r+','+c)?fmt(w*h):'<span class="q">?</span>')));
+  const all=showP||rev.size===pA.length*pB.length;
+  $('eq').innerHTML=`${fmt(A)} × ${fmt(B)} = ${prods.length>1?prods.join(' + ')+' = ':''}<b>${all?fmt(A*B):'<span class="q">?</span>'}</b>`;
+}
+function startDrag(side,k,e){drag={side,k,frozen:(side==='A'?sA:sB).slice()};svg.setPointerCapture(e.pointerId);e.preventDefault();}
+svg.addEventListener('pointermove',e=>{
+  if(!drag)return;const p=pt(svg,e),[W,H]=sizes(),isA=drag.side==='A',V=isA?A:B,len=isA?W:H,s=drag.frozen;
+  const rel=((isA?p.x-X0:p.y-Y0))/len;
+  let v;
+  if(scale)v=Math.round(rel*V);
+  else{const e2=[0,...s,V],k=e2.length-1,seg=Math.max(0,Math.min(k-1,Math.floor(rel*k))),f=rel*k-seg;v=Math.round(e2[seg]+f*(e2[seg+1]-e2[seg]));}
+  v=Math.max(0,Math.min(V,v));
+  const arr=isA?sA:sB;arr[drag.k]=v;render();
+});
+svg.addEventListener('pointerup',()=>{
+  if(!drag)return;const isA=drag.side==='A',V=isA?A:B;
+  let arr=(isA?sA:sB).filter(v=>v>0&&v<V);arr=[...new Set(arr)].sort((x,y)=>x-y);
+  if(isA)sA=arr;else sB=arr;drag=null;rev.clear();render();
+});
+function readAB(){A=Math.max(1,Math.min(999,Math.round(+$('a').value||1)));B=Math.max(1,Math.min(999,Math.round(+$('b').value||1)));$('a').value=A;$('b').value=B;sA=pv(A);sB=pv(B);scale=Math.max(A,B)/Math.min(A,B)<=5;$('scaleBtn').classList.toggle('on',scale);rev.clear();render();}
+$('a').addEventListener('change',readAB);$('b').addEventListener('change',readAB);
+$('pvBtn').onclick=()=>{sA=pv(A);sB=pv(B);rev.clear();render();};
+$('noBtn').onclick=()=>{sA=[];sB=[];rev.clear();render();};
+function addSplit(isA){const V=isA?A:B,arr=isA?sA:sB,e=[0,...arr,V];let best=0;for(let i=1;i<e.length;i++)if(e[i]-e[i-1]>e[best+1]-e[best])best=i-1;const gap=e[best+1]-e[best];if(gap<2)return;arr.push(e[best]+Math.floor(gap/2));arr.sort((x,y)=>x-y);rev.clear();render();}
+$('addA').onclick=()=>addSplit(true);$('addB').onclick=()=>addSplit(false);
+$('prodBtn').onclick=e=>{showP=!showP;e.target.classList.toggle('on',showP);rev.clear();render();};
+$('gridBtn').onclick=e=>{grid=!grid;e.target.classList.toggle('on',grid);render();};
+$('scaleBtn').onclick=e=>{scale=!scale;e.target.classList.toggle('on',scale);render();};
+readAB();
+</script></body></html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marble Bag</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:6px 11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.go{font-weight:700;background:#16a34a;border-color:#16a34a;color:#fff}
+.cnt{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;background:#fff;border:1px solid #e5e7eb}
+.cnt b{min-width:22px;text-align:center;font-size:18px}
+.dot{width:16px;height:16px;border-radius:50%;display:inline-block}
+#say{font-size:21px;padding:8px 14px;min-height:46px}
+#opts{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 8px}
+#opts button{font-size:18px;font-weight:700}
+svg{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Marble Bag</span><span>In the bag:</span><span id="counts"></span><button id="emptyBtn">Empty bag</button></div>
+<div class="bar">
+<button class="go" data-n="1">Pick one</button><button class="go" data-n="10">Pick 10</button><button class="go" data-n="100">Pick 100</button><button id="resetBtn">Reset results</button>
+<button id="peekBtn">👀 Peek in the bag</button><button id="probBtn">Show probability</button><button id="qBtn">❓ Certain, possible or impossible?</button>
+</div>
+<div id="say"></div>
+<div id="opts"></div>
+<svg id="svg" viewBox="0 0 1000 440"></svg>
+<div class="hint">Each marble goes back into the bag after it's picked. What's in the bag decides what can happen: if there are no green marbles, picking green is impossible. If every marble is red, picking red is certain.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),COL=[['red','#ef4444'],['blue','#3b82f6'],['green','#22c55e'],['yellow','#facc15']];
+let bag=[3,2,1,0],res=[0,0,0,0],last=null,peek=false,prob=false,trials=0;
+function gcd(a,b){while(b)[a,b]=[b,a%b];return a;}
+function counts(){$('counts').innerHTML=COL.map(([n,c],i)=>`<span class="cnt"><span class="dot" style="background:${c}"></span><button data-c="${i},-1">−</button><b>${bag[i]}</b><button data-c="${i},1">+</button></span>`).join(' ');
+  document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.c.split(',').map(Number);bag[i]=Math.max(0,Math.min(10,bag[i]+d));reset();});}
+function total(){return bag.reduce((a,b)=>a+b,0);}
+function render(){
+  svg.innerHTML='';
+  // bag
+  el('path',{d:'M90 140 Q60 400 200 410 Q340 400 310 140 Z',fill:'#a16207',stroke:'#713f12','stroke-width':4},svg);el('path',{d:'M110 140 Q200 110 290 140',fill:'none',stroke:'#713f12','stroke-width':8},svg);
+  if(peek){let k=0;bag.forEach((n,i)=>{for(let j=0;j<n;j++){const x=130+(k%6)*28,y=380-Math.floor(k/6)*28;el('circle',{cx:x,cy:y,r:12,fill:COL[i][1],stroke:'#1f2937'},svg);k++;}});}
+  else txt(svg,200,300,'?',80,'#fde68a','800');
+  txt(svg,200,436,`${total()} marble${total()===1?'':'s'}`,15,'#475569','700');
+  if(last!==null){el('circle',{cx:200,cy:80,r:34,fill:COL[last][1],stroke:'#1f2937','stroke-width':3},svg);el('circle',{cx:188,cy:68,r:9,fill:'#fff',opacity:.6},svg);txt(svg,200,30,COL[last][0]+'!',20,'#111827','800');}
+  // results chart
+  const L=420,W=540,T=60,H=260,max=Math.max(1,...res);
+  txt(svg,L+W/2,36,`Results (${trials} pick${trials===1?'':'s'})`,17,'#111827','800');
+  el('line',{x1:L,x2:L+W,y1:T+H,y2:T+H,stroke:'#1f2937','stroke-width':2},svg);
+  COL.forEach(([n,c],i)=>{const x=L+i*W/4+20,w=W/4-40,h=res[i]/max*H;el('rect',{x,y:T+H-h,width:w,height:h,fill:c},svg);txt(svg,x+w/2,T+H-h-8,String(res[i]),16,'#111827','700');txt(svg,x+w/2,T+H+22,n,15,'#334155','600');
+    if(prob&&total()){const p=bag[i]/total(),g=gcd(bag[i],total());txt(svg,x+w/2,T+H+44,bag[i]?`${bag[i]/g}/${total()/g}`:'0',15,'#1d4ed8','800');txt(svg,x+w/2,T+H+62,`${(Math.round(p*100)/100).toString()} = ${Math.round(p*100)}%`,13,'#1d4ed8','600');}});
+  if(prob&&total()){// probability line 0..1
+    const y=415,x0=440,x1=940;el('line',{x1:x0,x2:x1,y1:y,y2:y,stroke:'#1f2937','stroke-width':2},svg);
+    [[0,'0 impossible'],[0.5,'½ even chance'],[1,'1 certain']].forEach(([v,l])=>{const x=x0+v*(x1-x0);el('line',{x1:x,x2:x,y1:y-7,y2:y+7,stroke:'#1f2937','stroke-width':2},svg);txt(svg,x,y+22,l,12,'#475569','600');});
+    COL.forEach(([n,c],i)=>{const x=x0+bag[i]/total()*(x1-x0);el('circle',{cx:x,cy:y-12-i*4,r:7,fill:c,stroke:'#1f2937'},svg);});}
+}
+function pick(n){if(!total()){say('The bag is empty! Add some marbles.');return;}
+  for(let k=0;k<n;k++){let r=Math.floor(Math.random()*total()),i=0;while(r>=bag[i]){r-=bag[i];i++;}res[i]++;last=i;trials++;}
+  say(n===1?`You picked a <b>${COL[last][0]}</b> marble. It goes back in the bag.`:`Picked ${n} marbles. Which colour came up most? Is that what you expected?`);render();}
+function reset(){res=[0,0,0,0];trials=0;last=null;counts();render();say('');}
+function say(s){$('say').innerHTML=s;}
+document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>pick(+b.dataset.n));
+$('resetBtn').onclick=reset;$('emptyBtn').onclick=()=>{bag=[0,0,0,0];reset();};
+$('peekBtn').onclick=e=>{peek=!peek;e.target.classList.toggle('on',peek);render();};
+$('probBtn').onclick=e=>{prob=!prob;e.target.classList.toggle('on',prob);render();};
+$('qBtn').onclick=()=>{
+  const kinds=[[4,0,0,0],[3,2,0,0],[2,2,2,0],[5,1,0,0],[0,3,0,3],[1,1,1,1]];bag=kinds[Math.floor(Math.random()*kinds.length)].slice().sort(()=>Math.random()-.5);peek=true;$('peekBtn').classList.add('on');reset();
+  const i=Math.floor(Math.random()*4),ans=bag[i]===0?'impossible':bag[i]===total()?'certain':'possible';
+  say(`Is picking a <b>${COL[i][0]}</b> marble certain, possible or impossible?`);
+  const O=$('opts');O.innerHTML='';['certain','possible','impossible'].forEach(w=>{const b=document.createElement('button');b.textContent=w[0].toUpperCase()+w.slice(1);b.onclick=()=>{
+    if(w===ans){say(`✓ Yes, it's <b>${ans}</b>: there ${bag[i]===1?'is':'are'} ${bag[i]||'no'} ${COL[i][0]} marble${bag[i]===1?'':'s'} out of ${total()}.`+(ans==='possible'?(bag[i]*2>total()?' It is likely.':bag[i]*2===total()?' It is an even chance.':' It is unlikely.'):''));O.innerHTML='';}
+    else{b.disabled=true;b.style.opacity=.3;say(`Look in the bag. How many ${COL[i][0]} marbles are there?`);}};O.appendChild(b);});
+};
+counts();render();say('Set up the bag, then pick marbles without looking.');
+</script></body></html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fraction Shapes</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:16px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.v{font-size:20px;font-weight:800;min-width:30px;text-align:center}
+#say{font-size:22px;padding:8px 14px;min-height:46px}
+#yn{display:none;gap:10px;padding:0 14px 8px}
+#yn button{font-size:22px;font-weight:700;padding:10px 24px}
+svg{display:block;width:100%;max-width:860px;margin:0 auto;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Fraction Shapes</span>
+<button data-m="shape" class="on">Shapes</button><button data-m="coll">Collections</button><button data-m="quiz">Equal parts?</button>
+</div>
+<div class="bar" id="shapeBar">
+<span>Shape:</span><button data-k="circle" class="on">Circle</button><button data-k="square">Square</button><button data-k="rect">Rectangle</button>
+<span>Parts:</span><button class="p" data-p="2">2</button><button class="p on" data-p="4">4</button><button class="p" data-p="8">8</button><button class="p" data-p="3">3</button><button class="p" data-p="5">5</button><button class="p" data-p="6">6</button><button class="p" data-p="10">10</button>
+<button id="clearBtn">Clear shading</button>
+</div>
+<div class="bar" id="collBar" style="display:none">
+<span>Counters</span><button id="nm">−</button><span class="v" id="nv">8</span><button id="np">+</button>
+<span>Share into groups:</span><button class="g on" data-g="2">2</button><button class="g" data-g="3">3</button><button class="g" data-g="4">4</button><button class="g" data-g="5">5</button><button class="g" data-g="8">8</button>
+</div>
+<div id="say"></div>
+<div id="yn"><button id="yes">👍 Yes, equal parts</button><button id="no">👎 No, not equal</button></div>
+<svg id="svg" viewBox="0 0 860 440"></svg>
+<div class="hint">Shapes: tap the parts to shade them. Collections: counters are shared equally into groups, and you tap a group to shade it. "Equal parts?" asks whether a shape has been cut into equal parts.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),CX=300,CY=220,SH='#f97316';
+const NAMES={2:'halves',3:'thirds',4:'quarters',5:'fifths',6:'sixths',8:'eighths',10:'tenths'};
+const ONE={2:'half',3:'third',4:'quarter',5:'fifth',6:'sixth',8:'eighth',10:'tenth'};
+let mode='shape',kind='circle',parts=4,shaded=new Set(),N=8,G=2,gShaded=new Set(),quiz=null;
+function frac(x,y,n,d,fs,col){txt(svg,x,y-fs*0.25,String(n),fs,col,'800');el('line',{x1:x-fs*0.6,x2:x+fs*0.6,y1:y,y2:y,stroke:col,'stroke-width':3},svg);txt(svg,x,y+fs*0.95,String(d),fs,col,'800');}
+function pieces(kind,n,unequal){
+  // returns list of SVG path strings
+  const out=[];
+  if(kind==='circle'){const r=170;let cuts=Array.from({length:n+1},(_,i)=>i/n);if(unequal)cuts=unequalCuts(n);
+    for(let i=0;i<n;i++){const a1=-Math.PI/2+cuts[i]*2*Math.PI,a2=-Math.PI/2+cuts[i+1]*2*Math.PI;
+      out.push(n===1?`M${CX-r} ${CY}a${r} ${r} 0 1 0 ${2*r} 0a${r} ${r} 0 1 0 ${-2*r} 0`:`M${CX} ${CY}L${CX+r*Math.cos(a1)} ${CY+r*Math.sin(a1)}A${r} ${r} 0 ${a2-a1>Math.PI?1:0} 1 ${CX+r*Math.cos(a2)} ${CY+r*Math.sin(a2)}Z`);}}
+  else{const w=kind==='square'?340:480,h=340,x0=CX-w/2+(kind==='rect'?60:0),y0=CY-h/2;
+    if(n===4&&kind==='square'&&!unequal){for(let i=0;i<4;i++){const cx=x0+(i%2)*w/2,cy=y0+Math.floor(i/2)*h/2;out.push(`M${cx} ${cy}h${w/2}v${h/2}h${-w/2}Z`);}}
+    else if(n===8&&!unequal){for(let i=0;i<8;i++){const cx=x0+(i%4)*w/4,cy=y0+Math.floor(i/4)*h/2;out.push(`M${cx} ${cy}h${w/4}v${h/2}h${-w/4}Z`);}}
+    else{let cuts=Array.from({length:n+1},(_,i)=>i/n);if(unequal)cuts=unequalCuts(n);for(let i=0;i<n;i++){const xa=x0+cuts[i]*w,xb=x0+cuts[i+1]*w;out.push(`M${xa} ${y0}H${xb}V${y0+h}H${xa}Z`);}}}
+  return out;
+}
+function unequalCuts(n){let c;do{c=[0];for(let i=1;i<n;i++)c.push(i/n+(Math.random()-.5)*0.7/n);c.push(1);c.sort((a,b)=>a-b);}while(Math.max(...c.slice(1).map((v,i)=>v-c[i])) - Math.min(...c.slice(1).map((v,i)=>v-c[i]))<0.12);return c;}
+function render(){
+  svg.innerHTML='';
+  if(mode==='shape'||mode==='quiz'){
+    const n=mode==='quiz'?quiz.n:parts,paths=mode==='quiz'?quiz.paths:pieces(kind,parts,false);
+    paths.forEach((d,i)=>{const p=el('path',{d,fill:shaded.has(i)&&mode==='shape'?SH:'#fff',stroke:'#1f2937','stroke-width':3,style:mode==='shape'?'cursor:pointer':''},svg);
+      if(mode==='shape')p.addEventListener('pointerdown',()=>{shaded.has(i)?shaded.delete(i):shaded.add(i);update();});});
+    if(mode==='shape'){const k=shaded.size;
+      frac(740,150,k,parts,54,SH);
+      txt(svg,740,300,`${k} ${k===1?ONE[parts]:NAMES[parts]}`,24,'#334155','700');
+      txt(svg,740,334,`shaded`,20,'#64748b');
+      if(k&&k<parts)txt(svg,740,390,`${parts-k}/${parts} not shaded`,18,'#64748b');}
+  } else {
+    // collection: N counters shared into G groups
+    const per=Math.floor(N/G),rem=N-per*G,gw=Math.min(190,800/G),rows=Math.ceil(per/3);
+    for(let g=0;g<G;g++){
+      const x=30+g*(gw+12),on=gShaded.has(g),gr=el('g',{style:'cursor:pointer'},svg);
+      el('rect',{x,y:40,width:gw,height:Math.max(120,rows*52+40),rx:18,fill:on?'#ffedd5':'#f8fafc',stroke:on?SH:'#94a3b8','stroke-width':3},gr);
+      for(let i=0;i<per;i++)el('circle',{cx:x+gw/2+((i%3)-1)*Math.min(48,gw/3.4),cy:80+Math.floor(i/3)*52,r:18,fill:on?SH:'#64748b'},gr);
+      gr.addEventListener('pointerdown',()=>{on?gShaded.delete(g):gShaded.add(g);update();});
+    }
+    if(rem){for(let i=0;i<rem;i++)el('circle',{cx:60+i*44,cy:400,r:16,fill:'#dc2626'},svg);txt(svg,60+rem*44+10,406,'left over, so these can\'t be shared equally',18,'#dc2626','600').setAttribute('text-anchor','start');}
+  }
+}
+function update(){
+  let s='';
+  if(mode==='shape'){const k=shaded.size;s=`This ${kind==='rect'?'rectangle':kind} is cut into <b>${parts} equal parts</b>, called ${NAMES[parts]}.`+(k?` <b>${k}/${parts}</b> is shaded.`:'');}
+  if(mode==='coll'){const per=Math.floor(N/G),k=gShaded.size;s=N%G?`${N} counters can't be shared equally into ${G} groups.`:`${N} shared into ${G} equal groups gives <b>${per}</b> in each group. <b>1/${G} of ${N} = ${per}</b>`+(k>1?` &nbsp; ${k}/${G} of ${N} = <b>${k*per}</b>`:'');}
+  if(s)$('say').innerHTML=s;render();
+}
+function newQuiz(){
+  const k=['circle','square','rect'][Math.floor(Math.random()*3)],n=[2,3,4][Math.floor(Math.random()*3)],eq=Math.random()<.5;
+  quiz={n,eq,paths:pieces(k,n,!eq)};$('say').innerHTML=`Is this shape cut into <b>${NAMES[n]}</b>?`;render();
+}
+function answer(yes){
+  if(yes===quiz.eq){$('say').innerHTML=quiz.eq?`✓ Yes! All ${quiz.n} parts are the same size, so they are ${NAMES[quiz.n]}.`:`✓ Right! The parts are different sizes, so they are <b>not</b> ${NAMES[quiz.n]}.`;setTimeout(newQuiz,2200);}
+  else $('say').innerHTML='Look again. Are all the parts exactly the same size?';
+}
+$('yes').onclick=()=>answer(true);$('no').onclick=()=>answer(false);
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));
+  $('shapeBar').style.display=mode==='shape'?'flex':'none';$('collBar').style.display=mode==='coll'?'flex':'none';$('yn').style.display=mode==='quiz'?'flex':'none';
+  if(mode==='quiz')newQuiz();else update();});
+document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{kind=b.dataset.k;document.querySelectorAll('[data-k]').forEach(x=>x.classList.toggle('on',x===b));shaded.clear();update();});
+document.querySelectorAll('.p').forEach(b=>b.onclick=()=>{parts=+b.dataset.p;document.querySelectorAll('.p').forEach(x=>x.classList.toggle('on',x===b));shaded.clear();update();});
+document.querySelectorAll('.g').forEach(b=>b.onclick=()=>{G=+b.dataset.g;document.querySelectorAll('.g').forEach(x=>x.classList.toggle('on',x===b));gShaded.clear();update();});
+$('nm').onclick=()=>{N=Math.max(2,N-1);$('nv').textContent=N;gShaded.clear();update();};
+$('np').onclick=()=>{N=Math.min(24,N+1);$('nv').textContent=N;gShaded.clear();update();};
+$('clearBtn').onclick=()=>{shaded.clear();update();};
+update();
+</script></body></html>

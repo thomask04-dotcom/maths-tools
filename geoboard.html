@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Geoboard</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:14px}
+.title{font-weight:700;margin-right:6px;font-size:16px}
+button,select{font:inherit;font-size:14px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.wrap{display:flex;flex-wrap:wrap;gap:16px;padding:12px;align-items:flex-start}
+svg{display:block;width:100%;max-width:500px;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+#info{flex:1;min-width:220px;font-size:16px;line-height:1.6}
+#info .big{font-size:22px;font-weight:700}
+#info .muted{color:#6b7280;font-size:14px}
+.hint{font-size:13px;color:#6b7280;padding:0 12px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Geoboard</span>
+<button id="finBtn">Close shape</button>
+<button id="undoBtn">Undo point</button>
+<button id="delBtn">Delete shape</button>
+<button id="clearBtn">Clear all</button>
+<select id="size"><option value="5">5 × 5 pegs</option><option value="7">7 × 7 pegs</option><option value="11" selected>11 × 11 pegs</option></select>
+<button id="measBtn" class="on">Show measurements</button>
+</div>
+<div class="wrap"><svg id="svg"></svg><div id="info"></div></div>
+<div class="hint">Tap a peg to start a rubber band, then tap more pegs. Tap the first peg again to close the shape. Drag any corner to stretch it. Tap inside a shape to select it.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+
+const svg=document.getElementById('svg'),info=document.getElementById('info');
+const COLORS=['#ef4444','#2563eb','#16a34a','#9333ea','#f59e0b','#0891b2'];
+const M=30;let n=11,SP=44,bands=[],active=-1,drag=null,showMeas=true;
+function P(q){return [M+q[0]*SP,M+q[1]*SP];}
+function same(a,b){return a[0]===b[0]&&a[1]===b[1];}
+function clampPeg(p){return [Math.max(0,Math.min(n-1,Math.round((p.x-M)/SP))),Math.max(0,Math.min(n-1,Math.round((p.y-M)/SP)))];}
+function nearPeg(p){const q=clampPeg(p),[x,y]=P(q);return Math.hypot(p.x-x,p.y-y)<=SP*0.42?q:null;}
+function inside(pts,x,y){let c=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const [xi,yi]=pts[i],[xj,yj]=pts[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c;}return c;}
+function setSize(v){n=v;SP=Math.floor(440/(n-1));bands=[];active=-1;svg.setAttribute('viewBox',`0 0 ${2*M+(n-1)*SP} ${2*M+(n-1)*SP}`);render();}
+function render(){
+  svg.innerHTML='';const W=2*M+(n-1)*SP;
+  el('rect',{x:0,y:0,width:W,height:W,rx:14,fill:'#f3e3c3'},svg);
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){const [x,y]=P([i,j]);el('circle',{cx:x,cy:y,r:5,fill:'#78716c'},svg);}
+  bands.forEach((b,k)=>{
+    const pts=b.pts.map(P),s=pts.map(v=>v.join(',')).join(' '),act=k===active;
+    if(b.closed)el('polygon',{points:s,fill:b.c,'fill-opacity':act?.28:.16,stroke:b.c,'stroke-width':act?5:4,'stroke-linejoin':'round'},svg);
+    else el('polyline',{points:s,fill:'none',stroke:b.c,'stroke-width':act?5:4,'stroke-linejoin':'round','stroke-linecap':'round'},svg);
+    if(act)pts.forEach((v,i)=>el('circle',{cx:v[0],cy:v[1],r:i===0&&!b.closed?9:7,fill:i===0&&!b.closed?'#fff':b.c,stroke:b.c,'stroke-width':3},svg));
+  });
+  showInfo();
+}
+function showInfo(){
+  const b=bands[active];
+  if(!b){info.innerHTML='<div class="muted">Tap a peg to start a new shape.</div>';return;}
+  if(!b.closed){info.innerHTML=`<div class="muted">Keep tapping pegs. Tap the first peg (white centre) to close the shape.</div><div>Points: ${b.pts.length}</div>`;return;}
+  if(!showMeas){info.innerHTML='<div class="muted">Measurements hidden. Work them out yourself!</div>';return;}
+  const p=b.pts,L=p.length;let a2=0,per=0,straight=true,right=0;
+  for(let i=0;i<L;i++){const A=p[i],B=p[(i+1)%L],C=p[(i+2)%L];a2+=A[0]*B[1]-B[0]*A[1];per+=Math.hypot(B[0]-A[0],B[1]-A[1]);if(A[0]!==B[0]&&A[1]!==B[1])straight=false;if((B[0]-A[0])*(C[0]-B[0])+(B[1]-A[1])*(C[1]-B[1])===0)right++;}
+  a2=Math.abs(a2);const area=a2%2===0?String(a2/2):(Math.floor(a2/2)||'')+'½';
+  let name=({3:'Triangle',4:'Quadrilateral',5:'Pentagon',6:'Hexagon',7:'Heptagon',8:'Octagon'})[L]||L+'-sided shape';
+  if(L===4&&right===4){const s1=Math.hypot(p[1][0]-p[0][0],p[1][1]-p[0][1]),s2=Math.hypot(p[2][0]-p[1][0],p[2][1]-p[1][1]);name=Math.abs(s1-s2)<1e-9?'Square':'Rectangle';}
+  else if(L===3&&right)name='Right-angled triangle';
+  const perTxt=straight?`${Math.round(per)} units`:`≈ ${per.toFixed(1)} units <span class="muted">(slanted sides are longer than they look!)</span>`;
+  info.innerHTML=`<div class="big" style="color:${b.c}">${name}</div><div><b>Area:</b> ${area} square units</div><div><b>Perimeter:</b> ${perTxt}</div><div><b>Right angles:</b> ${right}</div>`;
+}
+svg.addEventListener('pointerdown',e=>{
+  const p=pt(svg,e),peg=nearPeg(p),b=bands[active];e.preventDefault();
+  if(!peg){for(let k=bands.length-1;k>=0;k--)if(bands[k].closed&&inside(bands[k].pts.map(P),p.x,p.y)){active=k;render();return;}return;}
+  if(b&&!b.closed){
+    if(b.pts.length>=3&&same(peg,b.pts[0]))b.closed=true;
+    else if(!b.pts.some(q=>same(q,peg)))b.pts.push(peg);
+    render();return;
+  }
+  for(let k=bands.length-1;k>=0;k--){const vi=bands[k].pts.findIndex(q=>same(q,peg));if(vi>=0){active=k;drag={k,vi};svg.setPointerCapture(e.pointerId);render();return;}}
+  bands.push({pts:[peg],closed:false,c:COLORS[bands.length%COLORS.length]});active=bands.length-1;render();
+});
+svg.addEventListener('pointermove',e=>{if(!drag)return;const q=clampPeg(pt(svg,e)),b=bands[drag.k];if(!b.pts.some((v,i)=>i!==drag.vi&&same(v,q))){b.pts[drag.vi]=q;render();}});
+svg.addEventListener('pointerup',()=>{drag=null;});
+document.getElementById('finBtn').onclick=()=>{const b=bands[active];if(b&&b.pts.length>=3){b.closed=true;render();}};
+document.getElementById('undoBtn').onclick=()=>{const b=bands[active];if(!b)return;if(b.closed)b.closed=false;else b.pts.pop();if(!b.pts.length){bands.splice(active,1);active=-1;}render();};
+document.getElementById('delBtn').onclick=()=>{if(active>=0){bands.splice(active,1);active=-1;render();}};
+document.getElementById('clearBtn').onclick=()=>{bands=[];active=-1;render();};
+document.getElementById('size').onchange=e=>setSize(+e.target.value);
+document.getElementById('measBtn').onclick=e=>{showMeas=!showMeas;e.target.classList.toggle('on',showMeas);render();};
+setSize(11);
+</script></body></html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Place Value Chart</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:14px}
+.title{font-weight:700;margin-right:6px;font-size:16px}
+button,input{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+button.op{font-weight:700;min-width:52px}
+input{width:130px}
+#num{margin-left:auto;font-size:22px;font-weight:700;padding:3px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px}
+#exp{font-size:16px;padding:6px 12px;color:#374151}
+#msg{color:#b45309;font-weight:600}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Place Value Chart</span>
+<label>Make <input id="make" placeholder="e.g. 34 205.6"></label><button id="makeBtn">Go</button>
+<button id="clearBtn">Clear</button>
+<span id="num">0</span>
+</div>
+<div class="bar">
+<button class="op" data-p="1">× 10</button><button class="op" data-p="2">× 100</button><button class="op" data-p="3">× 1000</button>
+<button class="op" data-p="-1">÷ 10</button><button class="op" data-p="-2">÷ 100</button><button class="op" data-p="-3">÷ 1000</button>
+<button id="milBtn">Millions</button><button id="decBtn" class="on">Decimals</button>
+<button id="valBtn" class="on">Show number</button>
+<button id="slideBtn">Number slide view</button>
+<span id="msg"></span>
+</div>
+<svg id="svg" viewBox="0 0 1000 540"></svg>
+<div id="exp"></div>
+<div class="hint">Tap inside a column to add a counter, or tap a counter to remove it. When a column has 10 or more counters, use "10 → 1" to trade them for 1 counter in the next place to the left. Use "1 → 10" to break a counter into 10 in the next place to the right. The ×/÷ buttons move every counter along.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,anchor,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+// exponent 6..-3
+const COLS=[
+ {e:6,n:'Millions',v:'1 000 000',c:'#7c3aed'},
+ {e:5,n:'Hundred thousands',v:'100 000',c:'#db2777'},{e:4,n:'Ten thousands',v:'10 000',c:'#db2777'},{e:3,n:'Thousands',v:'1000',c:'#db2777'},
+ {e:2,n:'Hundreds',v:'100',c:'#2563eb'},{e:1,n:'Tens',v:'10',c:'#2563eb'},{e:0,n:'Ones',v:'1',c:'#2563eb'},
+ {e:-1,n:'Tenths',v:'0.1',c:'#059669'},{e:-2,n:'Hundredths',v:'0.01',c:'#059669'},{e:-3,n:'Thousandths',v:'0.001',c:'#059669'}];
+const cnt={};COLS.forEach(c=>cnt[c.e]=0);
+let off=0,slide=false,animS=null,mil=false,dec=true,showV=true;
+function vis(){return COLS.filter(c=>(mil||c.e<6)&&(dec||c.e>=0));}
+// total in thousandths (integer, avoids float errors)
+function total(){return COLS.reduce((s,c)=>s+cnt[c.e]*10**(c.e+3),0);}
+function group(s){return s.length>4?s.replace(/\B(?=(\d{3})+(?!\d))/g,' '):s;}
+function fmtT(t){const w=Math.floor(t/1000),f=t%1000;let s=group(String(w));if(f){s+='.'+String(f).padStart(3,'0').replace(/0+$/,'');}return s;}
+function render(){
+  svg.innerHTML='';
+  const V=vis(),cw=1000/V.length,HY=74,BY0=HY,BY1=400;
+  V.forEach((c,i)=>{
+    const x=i*cw,k=cnt[c.e];
+    el('rect',{x,y:0,width:cw,height:HY,fill:c.c},svg);
+    const words=c.n.split(' ');
+    if(words.length>1&&cw<120){txt(svg,x+cw/2,24,words[0],13,'#fff','middle','700');txt(svg,x+cw/2,40,words[1],13,'#fff','middle','700');}
+    else txt(svg,x+cw/2,34,c.n,14,'#fff','middle','700');
+    txt(svg,x+cw/2,62,c.v,12,'#fff');
+    const body=el('rect',{x,y:BY0,width:cw,height:BY1-BY0,fill:i%2?'#f8fafc':'#fff',style:'cursor:copy'},svg);
+    body.addEventListener('pointerdown',()=>{cnt[c.e]++;msg('');render();});
+    // counters: 3 per row (2 when narrow)
+    const per=cw>=90?3:2,sp=Math.min(28,(cw-12)/per),r=Math.min(11,sp/2-2),rows=Math.ceil(k/per),vsp=Math.min(28,(BY1-BY0-20)/Math.max(rows,1));
+    for(let j=0;j<k;j++){
+      const col=j%per,row=Math.floor(j/per),cx=x+cw/2+(col-(per-1)/2)*sp,cy=BY0+18+row*vsp;
+      const d=el('circle',{cx:cx+off,cy,r:Math.min(r,vsp/2-1),fill:c.c,stroke:'#fff','stroke-width':1.5,style:'cursor:pointer'},svg);
+      d.addEventListener('pointerdown',ev=>{ev.stopPropagation();cnt[c.e]--;msg('');render();});
+    }
+    // digit
+    el('rect',{x:x+4,y:BY1+8,width:cw-8,height:54,rx:8,fill:k>9?'#fee2e2':'#fff',stroke:k>9?'#dc2626':'#cbd5e1','stroke-width':k>9?2:1},svg);
+    let dg=showV?String(k):'?';if(slide&&showV&&k===0){const nz=V.map(q=>cnt[q.e]).map((v,ii)=>v?ii:-1).filter(ii=>ii>=0),first=nz.length?nz[0]:-1,last=nz.length?nz[nz.length-1]:-1,onesI=V.findIndex(q=>q.e===0);const lastKeep=Math.max(last,onesI);if(first<0||(i<first&&i<onesI)||i>lastKeep)dg='';}
+    txt(svg,x+cw/2+off,BY1+46,dg,k>9?24:30,k>9?'#dc2626':(k===0?'#94a3b8':'#111827'),'middle','700');
+    // trade buttons
+    const left=V[i-1],right=V[i+1];
+    const btn=(bx,by,label,enabled,fn)=>{const g=el('g',{style:enabled?'cursor:pointer':'',opacity:enabled?1:.3},svg);el('rect',{x:bx,y:by,width:cw-12,height:26,rx:6,fill:'#fff',stroke:'#94a3b8'},g);txt(g,bx+(cw-12)/2,by+18,label,12,'#1f2937','middle','600');if(enabled)g.addEventListener('pointerdown',fn);};
+    btn(x+6,BY1+70,'← 10 → 1',!!left&&k>=10,()=>{cnt[c.e]-=10;cnt[left.e]++;render();});
+    btn(x+6,BY1+100,'1 → 10 →',!!right&&k>=1,()=>{cnt[c.e]--;cnt[right.e]+=10;render();});
+    if(i)el('line',{x1:x,x2:x,y1:0,y2:BY1,stroke:c.e===-1?'#111827':'#cbd5e1','stroke-width':c.e===-1?3:1},svg);
+    if(c.e===-1)el('circle',{cx:x,cy:BY1+36,r:5,fill:'#111827'},svg);
+  });
+  const t=total();
+  $('num').textContent=showV?fmtT(t):'?';
+  const parts=COLS.filter(c=>cnt[c.e]).map(c=>fmtT(cnt[c.e]*10**(c.e+3)));
+  $('exp').innerHTML=showV&&parts.length>1?'<b>Expanded:</b> '+parts.join(' + '):'';
+}
+function slideAnim(d){cancelAnimationFrame(animS);const t0=performance.now();const step=now=>{const k=Math.min(1,(now-t0)/800),e=1-Math.pow(1-k,3);off=d*(1-e);render();if(k<1)animS=requestAnimationFrame(step);else off=0;};animS=requestAnimationFrame(step);}
+function msg(s){$('msg').textContent=s;}
+function shift(p){
+  const V=vis(),minE=V[V.length-1].e,maxE=V[0].e;
+  for(const c of COLS)if(cnt[c.e]&&(c.e+p>maxE||c.e+p<minE)){msg(p>0?(mil?'Too big: this chart only goes up to millions.':'Too big for this chart. Try turning on Millions.'):(dec?'Too small: this chart only goes down to thousandths.':'Too small for this chart. Try turning on Decimals.'));return;}
+  const old={...cnt};COLS.forEach(c=>cnt[c.e]=0);COLS.forEach(c=>{if(old[c.e])cnt[c.e+p]=old[c.e];});
+  slideAnim(p*1000/vis().length);msg((p>0?'× ':'÷ ')+10**Math.abs(p)+': every digit moved '+Math.abs(p)+' place'+(Math.abs(p)>1?'s':'')+' to the '+(p>0?'left':'right')+'. The decimal point stays still.');render();
+}
+document.querySelectorAll('.op').forEach(b=>b.onclick=()=>shift(+b.dataset.p));
+$('makeBtn').onclick=()=>{
+  const s=$('make').value.replace(/[\s,]/g,'');
+  if(!/^\d*\.?\d*$/.test(s)||s===''||s==='.'){msg('Type a number like 4056.2');return;}
+  const [w,f='']=s.split('.');const W=w.replace(/^0+/,'');
+  if(f.length>3||W.length>7){msg('That number needs more columns than this chart has.');return;}
+  if(W.length===7){mil=true;$('milBtn').classList.add('on');}
+  if(f.length){dec=true;$('decBtn').classList.add('on');}
+  COLS.forEach(c=>cnt[c.e]=0);
+  [...W].forEach((d,i)=>cnt[W.length-1-i]=+d);[...f].forEach((d,i)=>cnt[-1-i]=+d);msg('');render();
+};
+$('make').addEventListener('keydown',e=>{if(e.key==='Enter')$('makeBtn').click();});
+$('clearBtn').onclick=()=>{COLS.forEach(c=>cnt[c.e]=0);msg('');render();};
+$('milBtn').onclick=e=>{if(mil&&cnt[6]){msg('Clear the Millions column first.');return;}mil=!mil;e.target.classList.toggle('on',mil);render();};
+$('decBtn').onclick=e=>{if(dec&&(cnt[-1]||cnt[-2]||cnt[-3])){msg('Clear the decimal columns first.');return;}dec=!dec;e.target.classList.toggle('on',dec);render();};
+$('valBtn').onclick=e=>{showV=!showV;e.target.classList.toggle('on',showV);render();};
+$('slideBtn').onclick=e=>{slide=!slide;e.target.classList.toggle('on',slide);render();};
+render();
+</script></body></html>

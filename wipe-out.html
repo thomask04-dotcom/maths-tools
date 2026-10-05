@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wipe-out</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#score{margin-left:auto;font-weight:700;font-size:18px}
+.wrap{display:flex;flex-wrap:wrap;gap:20px;padding:14px;justify-content:center;align-items:flex-start}
+.calc{background:#334155;border-radius:22px;padding:16px;width:320px}
+.screen{background:#d9f99d;border-radius:10px;padding:10px 14px;font-family:ui-monospace,Menlo,Consolas,monospace;text-align:right;margin-bottom:12px}
+.screen .big{font-size:40px;font-weight:800;letter-spacing:2px;min-height:48px}
+.screen .small{font-size:18px;color:#3f6212;min-height:24px}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.keys button{font-size:24px;font-weight:800;padding:14px 0;background:#f1f5f9}
+.keys .op{background:#fdba74}
+.keys .eq{background:#4ade80}
+.task{flex:1;min-width:260px;max-width:460px;font-size:20px;line-height:1.6}
+.task .num{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:38px;font-weight:800;letter-spacing:3px}
+.task .num .hl{color:#dc2626;text-decoration:underline}
+#fb{font-weight:700;min-height:60px}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Wipe-out</span>
+<button data-l="3">3-digit</button><button data-l="4" class="on">4-digit</button><button data-l="5">5-digit</button><button data-l="6">6-digit</button><button data-l="d">Decimals</button>
+<span id="score">⭐ 0</span>
+</div>
+<div class="wrap">
+<div class="calc"><div class="screen"><div class="small" id="sm"></div><div class="big" id="scr"></div></div>
+<div class="keys">
+<button>7</button><button>8</button><button>9</button><button class="op" data-k="C">C</button>
+<button>4</button><button>5</button><button>6</button><button class="op" data-k="−">−</button>
+<button>1</button><button>2</button><button>3</button><button class="op" data-k="+">+</button>
+<button>0</button><button>.</button><button class="op" data-k="⌫">⌫</button><button class="eq" data-k="=">=</button>
+</div></div>
+<div class="task"><div>The calculator shows:</div><div class="num" id="start"></div>
+<div>Make it show:</div><div class="num" id="target"></div>
+<div>…by taking away <b>one</b> number. What do you need to subtract?</div>
+<div id="fb"></div><button id="newBtn">🎲 New number</button> <button id="hintBtn">💡 Hint</button></div>
+</div>
+<div class="hint">Wipe out the red digit by subtracting its value. In 3042, the 4 is worth 40, so 3042 − 40 = 3002. Say the answer as a number ("three thousand and two"), not as a string of digits.</div>
+<script>
+const $=id=>document.getElementById(id);
+let level='4',start=0,target=0,digitIdx=0,val=0,entry='',op=null,score=0,dp=0,tries=0;
+const ones=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'],tens=['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+const u100=x=>x<20?ones[x]:tens[Math.floor(x/10)]+(x%10?'-'+ones[x%10]:'');
+const u1000=x=>{const h=Math.floor(x/100),r=x%100;return (h?ones[h]+' hundred':'')+(h&&r?' and ':'')+(r||!h?u100(r):'');};
+function words(n){const w=Math.floor(n),f=Math.round((n-w)*10**dp);let s;if(w===0)s='zero';else{const th=Math.floor(w/1000),r=w%1000;s=(th?u1000(th)+' thousand':'')+(th&&r?(r<100?' and ':', '):'')+(r?u1000(r):'');}
+  if(dp&&f){s+=' point '+String(f).padStart(dp,'0').split('').map(d=>ones[+d]).join(' ');}return s;}
+const fmt=n=>{const s=n.toFixed(dp);const [w,f]=s.split('.');return (w.length>4?w.replace(/\B(?=(\d{3})+(?!\d))/g,' '):w)+(f?'.'+f:'');};
+function newQ(){
+  let digits;dp=level==='d'?(Math.random()<.5?1:2):0;const L=level==='d'?3+dp:+level;
+  do{digits=Array.from({length:L},(_,i)=>i===0?1+Math.floor(Math.random()*9):Math.floor(Math.random()*10));}while(digits.filter(d=>d).length<2);
+  const nz=digits.map((d,i)=>d?i:-1).filter(i=>i>0);digitIdx=nz[Math.floor(Math.random()*nz.length)];
+  const S=+digits.join('')/10**dp;const place=L-1-digitIdx-dp,sub=digits[digitIdx]*10**place;start=S;target=Math.round((S-sub)*10**dp)/10**dp;
+  const str=fmt(start),tStr=fmt(target);let di=-1,html='';for(const ch of str){if(/\d/.test(ch))di++;html+=di===digitIdx&&/\d/.test(ch)?`<span class="hl">${ch}</span>`:ch;}
+  $('start').innerHTML=html;$('target').textContent=tStr;val=start;entry='';op=null;tries=0;$('fb').innerHTML='';show();
+}
+function show(){$('scr').textContent=entry!==''?entry:fmt(val);$('sm').textContent=op?fmt(val)+' '+op:'';}
+function press(k){
+  if(/^[\d.]$/.test(k)){if(k==='.'&&entry.includes('.'))return;if(entry.length<10)entry+=k;show();return;}
+  if(k==='⌫'){entry=entry.slice(0,-1);show();return;}
+  if(k==='C'){val=start;entry='';op=null;$('fb').innerHTML='';show();return;}
+  if(k==='−'||k==='+'){if(entry!=='')val=+entry;entry='';op=k;show();return;}
+  if(k==='='){if(!op||entry===''){$('fb').innerHTML='Press − then type the number to take away, then =.';return;}
+    const e=+entry,res=Math.round((op==='−'?val-e:val+e)*10**dp)/10**dp;const was=val;val=res;entry='';op=null;show();tries++;
+    if(Math.abs(res-target)<1e-9&&Math.abs(was-start)<1e-9){score++;$('score').textContent='⭐ '+score;$('fb').innerHTML=`✓ Wiped out! ${fmt(start)} − ${e} = ${fmt(target)}<br><span style="color:#1e3a8a">Say it: “${words(target)}”</span>`;}
+    else{$('fb').innerHTML=`${fmt(was)} ${op||'−'} ${fmt(e)} = ${fmt(res)}. That's not ${fmt(target)}. Press C and try again.`;}}
+}
+document.querySelectorAll('.keys button').forEach(b=>b.onclick=()=>press(b.dataset.k||b.textContent));
+document.addEventListener('keydown',e=>{const m={'-':'−','Enter':'=','Backspace':'⌫','Escape':'C','+':'+'};if(/^[\d.]$/.test(e.key))press(e.key);else if(m[e.key])press(m[e.key]);});
+$('newBtn').onclick=newQ;
+$('hintBtn').onclick=()=>{const L=String(start).replace('.','').length;$('fb').innerHTML='💡 Which place is the red digit in? Ones, tens, hundreds, thousands'+(dp?', tenths, hundredths':'')+'… What is it worth?';};
+document.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{level=b.dataset.l;document.querySelectorAll('[data-l]').forEach(x=>x.classList.toggle('on',x===b));newQ();});
+newQ();
+</script></body></html>

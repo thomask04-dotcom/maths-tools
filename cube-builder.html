@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cube Builder</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input{font:inherit;font-size:15px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.v{font-size:20px;font-weight:800;min-width:26px;text-align:center}
+#count{margin-left:auto;font-size:22px;font-weight:800;padding:2px 12px;border:2px solid #e5e7eb;border-radius:10px;background:#fff}
+.wrap{display:flex;flex-wrap:wrap;gap:10px;padding:8px}
+#main{flex:1;min-width:320px}
+#views{flex:0 0 260px}
+#say{font-size:19px;padding:8px 14px;min-height:40px;line-height:1.5}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.vt{font-weight:700;font-size:14px;color:#334155;margin:4px 0}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Cube Builder</span>
+<button data-m="free" class="on">Free build</button><button data-m="prism">Rectangular prism</button><button data-m="c24">24 cubes challenge</button>
+<span id="count">0 cubes</span>
+</div>
+<div class="bar" id="ctl"></div>
+<div id="say"></div>
+<div class="wrap"><div id="main"><svg id="svg" viewBox="0 0 700 630"></svg></div>
+<div id="views"><div class="vt">Top view</div><svg id="vTop" viewBox="0 0 200 200"></svg><div class="vt">Front view</div><svg id="vFront" viewBox="0 0 200 200"></svg><div class="vt">Side view</div><svg id="vSide" viewBox="0 0 200 200"></svg></div></div>
+<div class="hint">Free build: tap the floor or a face of a cube to add a new cube next to it. Switch to "Remove" to take cubes away, and turn the model to look from another side. The views on the right show what you'd see looking from the top, front and side. Prism: volume = cubes in a layer × number of layers.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),N=6,HMAX=8,S=40,A=S*Math.cos(Math.PI/6),B=S/2,CX=350,CY=350;
+let cubes=new Set(),mode='free',tool='add',rot=0,prism={l:4,w:3,h:2,layers:false},found=new Set(),col='#60a5fa';
+const K=(x,y,z)=>x+','+y+','+z;
+function toD(x,y){for(let i=0;i<rot;i++)[x,y]=[N-1-y,x];return [x,y];}
+function toM(x,y){for(let i=0;i<rot;i++)[x,y]=[y,N-1-x];return [x,y];}
+function P(x,y,z){return [CX+(x-y)*A,CY+(x+y)*B-z*S];}
+function poly(pts,fill,stroke){return el('polygon',{points:pts.map(p=>P(...p).join(',')).join(' '),fill,stroke:stroke||'#1e293b','stroke-width':1.5,'stroke-linejoin':'round'},svg);}
+function shade(hex,f){const n=parseInt(hex.slice(1),16),r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgb(${Math.round(r*f)},${Math.round(g*f)},${Math.round(b*f)})`;}
+function add(x,y,z){if(x<0||y<0||x>=N||y>=N||z<0||z>=HMAX)return;cubes.add(K(x,y,z));}
+function render(){
+  svg.innerHTML='';
+  // floor
+  for(let dx=0;dx<N;dx++)for(let dy=0;dy<N;dy++){const t=poly([[dx,dy,0],[dx+1,dy,0],[dx+1,dy+1,0],[dx,dy+1,0]],(dx+dy)%2?'#f1f5f9':'#e2e8f0','#cbd5e1');
+    if(mode==='free')t.addEventListener('pointerdown',()=>{if(tool!=='add')return;const [x,y]=toM(dx,dy);let z=0;while(cubes.has(K(x,y,z)))z++;add(x,y,z);update();});}
+  // compass label
+  const [fx,fy]=P(N/2,N+0.6,0);txt(svg,fx-30,fy+26,'front',14,'#64748b','700');const [sx,sy]=P(N+0.6,N/2,0);txt(svg,sx+26,sy+26,'side',14,'#64748b','700');
+  const list=[...cubes].map(k=>{const [x,y,z]=k.split(',').map(Number);const [dx,dy]=toD(x,y);return {x,y,z,dx,dy};});
+  const gap=mode!=='free'&&prism.layers?0.6:0;
+  const Dset=new Set(list.map(c=>K(c.dx,c.dy,c.z)));
+  list.sort((a,b)=>(a.dx+a.dy+a.z)-(b.dx+b.dy+b.z)||a.z-b.z);
+  for(const c of list){
+    const {dx,dy}=c,z=c.z+c.z*gap,has=(a,b,cz)=>Dset.has(K(a,b,cz));
+    const baseCol=mode==='free'?col:['#60a5fa','#f87171','#4ade80','#facc15','#c084fc','#fb923c','#2dd4bf','#f472b6'][c.z%8];
+    const faces=[];
+    if(!has(dx,dy,c.z+1)||gap)faces.push(['top',[[dx,dy,z+1],[dx+1,dy,z+1],[dx+1,dy+1,z+1],[dx,dy+1,z+1]],1.0,[0,0,1]]);
+    if(!has(dx+1,dy,c.z))faces.push(['r',[[dx+1,dy,z],[dx+1,dy+1,z],[dx+1,dy+1,z+1],[dx+1,dy,z+1]],0.72,[1,0,0]]);
+    if(!has(dx,dy+1,c.z))faces.push(['l',[[dx,dy+1,z],[dx+1,dy+1,z],[dx+1,dy+1,z+1],[dx,dy+1,z+1]],0.86,[0,1,0]]);
+    for(const [nm,pts,f,nrm] of faces){const pl=poly(pts,shade(baseCol,f));
+      if(mode==='free')pl.addEventListener('pointerdown',ev=>{ev.stopPropagation();if(tool==='remove'){cubes.delete(K(c.x,c.y,c.z));update();return;}
+        const [tx,ty]=toM(dx+nrm[0],dy+nrm[1]);add(tx,ty,c.z+nrm[2]);update();});}
+  }
+  if(mode!=='free'&&prism.layers){for(let z=0;z<prism.h;z++){const [lx,ly]=P(0,prism.w,z+z*gap+0.5);txt(svg,lx-20,ly,`Layer ${z+1}: ${prism.l*prism.w}`,15,'#334155','700','end');}}
+  views();
+}
+function views(){
+  const L=[...cubes].map(k=>k.split(',').map(Number));
+  const draw=(id,w,h,filled,labelX,labelY)=>{const v=$(id);v.innerHTML='';const s=Math.min(180/w,180/h),ox=(200-w*s)/2,oy=(200-h*s)/2;
+    for(let i=0;i<w;i++)for(let j=0;j<h;j++){const on=filled(i,j);el('rect',{x:ox+i*s,y:oy+j*s,width:s,height:s,fill:on?'#60a5fa':'#fff',stroke:'#cbd5e1'},v);}};
+  const maxZ=Math.max(3,...L.map(c=>c[2]+1));
+  // top: looking down, rows = y (front at bottom), cols = x
+  draw('vTop',N,N,(i,j)=>L.some(([x,y])=>x===i&&y===j));
+  draw('vFront',N,maxZ,(i,j)=>L.some(([x,y,z])=>x===i&&z===maxZ-1-j));
+  draw('vSide',N,maxZ,(i,j)=>L.some(([x,y,z])=>y===N-1-i&&z===maxZ-1-j));
+}
+function buildPrism(){cubes.clear();for(let x=0;x<prism.l;x++)for(let y=0;y<prism.w;y++)for(let z=0;z<prism.h;z++)cubes.add(K(x,y,z));}
+function isPrism(){if(!cubes.size)return null;const L=[...cubes].map(k=>k.split(',').map(Number)),mn=[0,1,2].map(i=>Math.min(...L.map(c=>c[i]))),mx=[0,1,2].map(i=>Math.max(...L.map(c=>c[i]))),d=mx.map((v,i)=>v-mn[i]+1);return d[0]*d[1]*d[2]===cubes.size&&mn[2]===0?d:null;}
+function update(){
+  const n=cubes.size;$('count').textContent=n+' cube'+(n===1?'':'s');let s='';
+  if(mode==='free'){const d=isPrism();s=n?(d?`That's a rectangular prism: ${d[0]} long, ${d[1]} wide and ${d[2]} high. Volume = ${d[0]} × ${d[1]} × ${d[2]} = <b>${n} cubes</b>.`:`You have used <b>${n}</b> cubes.`):'Tap the floor to put down your first cube.';}
+  if(mode==='prism'){const {l,w,h}=prism;s=`Each layer is ${l} × ${w} = <b>${l*w}</b> cubes. There ${h===1?'is':'are'} <b>${h}</b> layer${h===1?'':'s'}. Volume = ${l*w} × ${h} = <b>${l*w*h} cubic units</b>.`;}
+  if(mode==='c24'){const {l,w,h}=prism,v=l*w*h;if(v===24){const k=[l,w,h].sort((a,b)=>a-b).join(' × ');found.add(k);}
+    s=v===24?`✓ ${l} × ${w} × ${h} uses 24 cubes!`:`${l} × ${w} × ${h} = ${v} cubes. Change the sizes to use exactly <b>24</b> cubes.`;
+    s+=`<br>Found so far (${found.size}): ${[...found].join(', ')||'none yet'}. There are 4 different ones that fit here (there are 6 if you had more room). Can you find them all?`;}
+  $('say').innerHTML=s;render();
+}
+function ctl(){
+  const C=$('ctl');
+  if(mode==='free')C.innerHTML='<button id="addT" class="on">➕ Add</button><button id="remT">➖ Remove</button><button id="rotB">↻ Turn the model</button><button id="clrB">Clear</button><span>Colour:</span>'+['#60a5fa','#f87171','#4ade80','#facc15','#c084fc'].map(c=>`<button data-c="${c}" style="background:${c};width:30px;height:30px;padding:0"></button>`).join('');
+  else C.innerHTML=['l','w','h'].map(k=>`<span>${{l:'Length',w:'Width',h:'Height'}[k]}</span><button data-d="${k},-1">−</button><span class="v" id="v${k}">${prism[k]}</span><button data-d="${k},1">+</button>`).join(' ')+`<button id="layB" class="${prism.layers?'on':''}">Show layers</button><button id="rotB">↻ Turn</button>`;
+  if($('addT')){$('addT').onclick=()=>{tool='add';$('addT').classList.add('on');$('remT').classList.remove('on');};$('remT').onclick=()=>{tool='remove';$('remT').classList.add('on');$('addT').classList.remove('on');};$('clrB').onclick=()=>{cubes.clear();update();};
+    C.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{col=b.dataset.c;render();});}
+  $('rotB').onclick=()=>{rot=(rot+1)%4;render();};
+  C.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{const [k,d]=b.dataset.d.split(',');const max=k==='h'?HMAX:N;prism[k]=Math.max(1,Math.min(max,prism[k]+ +d));$('v'+k).textContent=prism[k];buildPrism();update();});
+  if($('layB'))$('layB').onclick=e=>{prism.layers=!prism.layers;e.target.classList.toggle('on',prism.layers);render();};
+}
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));rot=0;
+  if(mode==='free')cubes.clear();else{if(mode==='c24'){prism={l:2,w:2,h:2,layers:false};}else prism={l:4,w:3,h:2,layers:false};buildPrism();}ctl();update();});
+ctl();update();
+</script></body></html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Right Angle Checker</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#score{margin-left:auto;font-weight:700;font-size:18px}
+#ans{display:flex;flex-wrap:wrap;gap:8px;padding:8px 10px}
+#ans button{font-size:17px;font-weight:700;padding:10px 16px}
+#say{font-size:21px;padding:4px 14px;min-height:36px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Right Angle Checker</span>
+<button id="newBtn">🔀 New angle</button>
+<button id="namesBtn">Use angle names</button>
+<button id="snapBtn">Put checker on the angle</button>
+<span id="score">⭐ 0</span>
+</div>
+<div id="ans"></div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 520"></svg>
+<div class="hint">The purple corner is a right angle, like the corner of a sheet of paper. Drag it onto the angle, turn it with the orange handle, and compare. Is the angle smaller than, the same as, or bigger than a right angle?</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),RAD=Math.PI/180,V={x:420,y:330},L=230;
+let base=0,size=90,chk={x:800,y:400,rot:0},names=false,score=0,done=false,drag=null;
+function cat(s){if(s<90)return 'acute';if(s===90)return 'right';if(s<180)return 'obtuse';if(s===180)return 'straight';return 'reflex';}
+const PLAIN={acute:'Smaller than a right angle',right:'A right angle',obtuse:'Bigger than a right angle (less than a straight line)',straight:'A straight angle',reflex:'Bigger than a straight angle'};
+const NAMED={acute:'Acute',right:'Right',obtuse:'Obtuse',straight:'Straight',reflex:'Reflex'};
+function P(c,a,r){return [c.x+r*Math.cos(a*RAD),c.y-r*Math.sin(a*RAD)];}
+function newAngle(){
+  const pool=names?[20,35,45,60,75,90,90,110,125,140,160,180,200,240,270,300]:[20,35,45,60,75,90,90,90,110,125,140,160];
+  size=pool[Math.floor(Math.random()*pool.length)]+(Math.random()<.5?0:(Math.random()<.5?-3:3));if(size===93||size===87)size=90;
+  base=Math.floor(Math.random()*8)*45+(Math.random()<.5?0:15);chk={x:800,y:400,rot:0};done=false;$('say').textContent='';buttons();render();
+}
+function buttons(){const A=$('ans');A.innerHTML='';const keys=names?['acute','right','obtuse','straight','reflex']:['acute','right','obtuse'];
+  keys.forEach(k=>{const b=document.createElement('button');b.textContent=names?NAMED[k]:PLAIN[k];b.onclick=()=>answer(k,b);A.appendChild(b);});}
+function answer(k,b){
+  if(done)return;const c=cat(size);
+  if(k===c){done=true;score++;$('score').textContent='⭐ '+score;$('say').innerHTML=`✓ Yes! This is ${c==='acute'||c==='obtuse'?'an':'a'} <b>${NAMED[c].toLowerCase()} angle</b>. Press 🔀 for another.`;}
+  else{b.disabled=true;b.style.opacity=.35;$('say').textContent='Not quite. Put the right-angle checker on the corner to compare.';}
+}
+function render(){
+  svg.innerHTML='';el('rect',{x:0,y:0,width:1000,height:520,fill:'#fff'},svg);
+  const [ax,ay]=P(V,base,L),[bx,by]=P(V,base+size,L),r=50;
+  const big=size>180?1:0,[sx,sy]=P(V,base,r),[ex,ey]=P(V,base+size,r);
+  el('path',{d:`M${V.x} ${V.y}L${sx} ${sy}A${r} ${r} 0 ${big} 0 ${ex} ${ey}Z`,fill:'#fde68a',stroke:'#d97706','stroke-width':2},svg);
+  el('line',{x1:V.x,y1:V.y,x2:ax,y2:ay,stroke:'#1f2937','stroke-width':6,'stroke-linecap':'round'},svg);
+  el('line',{x1:V.x,y1:V.y,x2:bx,y2:by,stroke:'#1f2937','stroke-width':6,'stroke-linecap':'round'},svg);
+  el('circle',{cx:V.x,cy:V.y,r:6,fill:'#1f2937'},svg);
+  // checker: an L-shaped paper corner with right angle at its origin
+  const g=el('g',{transform:`translate(${chk.x} ${chk.y}) rotate(${-chk.rot})`},svg);
+  const body=el('path',{d:'M0 0 H150 V-34 H34 V-150 H0 Z',fill:'#a78bfa','fill-opacity':.55,stroke:'#6d28d9','stroke-width':3,style:'cursor:move'},g);
+  el('path',{d:'M0 -22 H22 V0',fill:'none',stroke:'#4c1d95','stroke-width':3,'pointer-events':'none'},g);
+  body.addEventListener('pointerdown',e=>start('move',e));
+  const h=el('g',{style:'cursor:grab'},g);el('circle',{cx:150,cy:-17,r:15,fill:'#f97316',stroke:'#fff','stroke-width':3},h);txt(h,150,-11,'⟳',15,'#fff','700');
+  h.addEventListener('pointerdown',e=>start('rot',e));
+}
+function start(t,e){const p=pt(svg,e);drag={t,ox:p.x-chk.x,oy:p.y-chk.y,r0:chk.rot,a0:Math.atan2(-(p.y-chk.y),p.x-chk.x)/RAD};svg.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();}
+svg.addEventListener('pointermove',e=>{
+  if(!drag)return;const p=pt(svg,e);
+  if(drag.t==='move'){chk.x=p.x-drag.ox;chk.y=p.y-drag.oy;if(Math.hypot(chk.x-V.x,chk.y-V.y)<16){chk.x=V.x;chk.y=V.y;}}
+  else{let r=drag.r0+Math.atan2(-(p.y-chk.y),p.x-chk.x)/RAD-drag.a0;for(const t of [base,base+size-90])if(Math.abs(((r-t)%360+540)%360-180)<5)r=t;chk.rot=((r%360)+360)%360;}
+  render();
+});
+svg.addEventListener('pointerup',()=>{drag=null;});
+$('newBtn').onclick=newAngle;
+$('namesBtn').onclick=e=>{names=!names;e.target.classList.toggle('on',names);newAngle();};
+$('snapBtn').onclick=()=>{chk.x=V.x;chk.y=V.y;chk.rot=base;render();};
+newAngle();
+</script></body></html>

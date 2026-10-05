@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Area & Perimeter</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input,select{font:inherit;font-size:15px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input[type=number]{width:64px;text-align:center}
+#say{font-size:20px;padding:8px 14px;min-height:44px;line-height:1.5}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Area & Perimeter</span>
+<button data-t="build" class="on">Build shapes</button><button data-t="cover">Cover a rectangle</button><button data-t="L">L-shapes</button><button data-t="para">Parallelograms & triangles</button>
+</div>
+<div class="bar" id="ctl"></div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 560"></svg>
+<div class="hint">Area is how many square units cover the surface (no gaps, no overlaps). Perimeter is the distance around the outside. Shapes with the same perimeter can have different areas!</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),U=40,GX=16,GY=12,X0=(1000-GX*U)/2,Y0=30;
+let tab='build',cells=new Set(),paintMode=null,goal=null,cov={w:7,h:4,unit:'sq',grid:'none',placed:new Set(),rows:false},Lst={how:null},par={b:6,h:4,s:2,cut:false,tri:false};
+const key=(x,y)=>x+','+y;
+function perim(set){let p=0;for(const k of set){const [x,y]=k.split(',').map(Number);for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])if(!set.has(key(x+dx,y+dy)))p++;}return p;}
+function grid(w,h,x0,y0,col){for(let i=0;i<=w;i++)el('line',{x1:x0+i*U,x2:x0+i*U,y1:y0,y2:y0+h*U,stroke:col||'#e2e8f0','stroke-width':1},svg);for(let j=0;j<=h;j++)el('line',{x1:x0,x2:x0+w*U,y1:y0+j*U,y2:y0+j*U,stroke:col||'#e2e8f0','stroke-width':1},svg);}
+function ctl(){
+  const C=$('ctl');let h='';
+  if(tab==='build')h='<button id="clr">Clear</button><button id="gP">🎯 Perimeter challenge</button><button id="gA">🎯 Area challenge</button><span id="gtxt" style="font-weight:600"></span>';
+  if(tab==='cover')h='<label>Rectangle <input type="number" id="cw" min="1" max="15" value="'+cov.w+'"> by <input type="number" id="ch" min="1" max="10" value="'+cov.h+'"></label><span>Cover with:</span><button data-u="sq" class="'+(cov.unit==='sq'?'on':'')+'">squares</button><button data-u="ci" class="'+(cov.unit==='ci'?'on':'')+'">circles</button><button id="rowBtn">Fill a row</button><button id="fillBtn">Fill it all</button><button id="cclr">Clear</button><span>Grid:</span><select id="gsel"><option value="none">no grid</option><option value="top">grid on top</option><option value="behind">grid behind</option></select>';
+  if(tab==='L')h='<span>Find the area by:</span><button data-l="across">cutting across</button><button data-l="down">cutting down</button><button data-l="move">moving a piece</button><button data-l="sub">big rectangle take away</button><button data-l="none">just the shape</button><button id="Lnew">🎲 New L-shape</button>';
+  if(tab==='para')h='<label>Base <input type="number" id="pb" min="2" max="12" value="'+par.b+'"></label><label>Height <input type="number" id="ph" min="1" max="8" value="'+par.h+'"></label><button id="cutBtn">✂ Cut and move the triangle</button><button id="triBtn">Split into 2 triangles</button>';
+  C.innerHTML=h;
+  if(tab==='build'){$('clr').onclick=()=>{cells.clear();render();};$('gP').onclick=()=>{goal={t:'P',v:[12,14,16,18,20][Math.floor(Math.random()*5)]};cells.clear();render();};$('gA').onclick=()=>{goal={t:'A',v:[6,8,10,12,16][Math.floor(Math.random()*5)]};cells.clear();render();};}
+  if(tab==='cover'){const up=()=>{cov.w=Math.max(1,Math.min(15,+$('cw').value||1));cov.h=Math.max(1,Math.min(10,+$('ch').value||1));cov.placed.clear();render();};$('cw').oninput=up;$('ch').oninput=up;
+    C.querySelectorAll('[data-u]').forEach(b=>b.onclick=()=>{cov.unit=b.dataset.u;cov.placed.clear();ctl();render();});
+    $('rowBtn').onclick=()=>{for(let y=0;y<cov.h;y++){let row=true;for(let x=0;x<cov.w;x++)if(!cov.placed.has(key(x,y)))row=false;if(!row){for(let x=0;x<cov.w;x++)cov.placed.add(key(x,y));break;}}render();};
+    $('fillBtn').onclick=()=>{for(let y=0;y<cov.h;y++)for(let x=0;x<cov.w;x++)cov.placed.add(key(x,y));render();};$('cclr').onclick=()=>{cov.placed.clear();render();};
+    $('gsel').value=cov.grid;$('gsel').onchange=e=>{cov.grid=e.target.value;render();};}
+  if(tab==='L'){C.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{Lst.how=b.dataset.l;C.querySelectorAll('[data-l]').forEach(x=>x.classList.toggle('on',x===b));render();});$('Lnew').onclick=()=>{Lst.W=4+Math.floor(Math.random()*5);Lst.H=3+Math.floor(Math.random()*3);Lst.cw=1+Math.floor(Math.random()*(Lst.W-2));Lst.ch=1+Math.floor(Math.random()*(Lst.H-1));Lst.how=null;ctl();render();};}
+  if(tab==='para'){const up=()=>{par.b=Math.max(2,Math.min(12,+$('pb').value||2));par.h=Math.max(1,Math.min(8,+$('ph').value||1));render();};$('pb').oninput=up;$('ph').oninput=up;$('cutBtn').onclick=e=>{par.cut=!par.cut;par.tri=false;e.target.classList.toggle('on',par.cut);$('triBtn').classList.remove('on');render();};$('triBtn').onclick=e=>{par.tri=!par.tri;par.cut=false;e.target.classList.toggle('on',par.tri);$('cutBtn').classList.remove('on');render();};}
+}
+function render(){
+  svg.innerHTML='';let s='';
+  if(tab==='build'){
+    svg.setAttribute('viewBox','0 0 1000 540');grid(GX,GY,X0,Y0);
+    for(const k of cells){const [x,y]=k.split(',').map(Number);el('rect',{x:X0+x*U,y:Y0+y*U,width:U,height:U,fill:'#93c5fd',stroke:'#1e40af','stroke-width':1},svg);}
+    // outline perimeter edges
+    for(const k of cells){const [x,y]=k.split(',').map(Number);const X=X0+x*U,Y=Y0+y*U;
+      if(!cells.has(key(x,y-1)))el('line',{x1:X,x2:X+U,y1:Y,y2:Y,stroke:'#dc2626','stroke-width':4},svg);if(!cells.has(key(x,y+1)))el('line',{x1:X,x2:X+U,y1:Y+U,y2:Y+U,stroke:'#dc2626','stroke-width':4},svg);
+      if(!cells.has(key(x-1,y)))el('line',{x1:X,x2:X,y1:Y,y2:Y+U,stroke:'#dc2626','stroke-width':4},svg);if(!cells.has(key(x+1,y)))el('line',{x1:X+U,x2:X+U,y1:Y,y2:Y+U,stroke:'#dc2626','stroke-width':4},svg);}
+    const hit=el('rect',{x:X0,y:Y0,width:GX*U,height:GY*U,fill:'transparent',style:'cursor:crosshair'},svg);
+    const at=e=>{const p=pt(svg,e);const x=Math.floor((p.x-X0)/U),y=Math.floor((p.y-Y0)/U);return x>=0&&y>=0&&x<GX&&y<GY?key(x,y):null;};
+    hit.addEventListener('pointerdown',e=>{const k=at(e);if(!k)return;paintMode=cells.has(k)?'erase':'paint';paintMode==='paint'?cells.add(k):cells.delete(k);svg.setPointerCapture(e.pointerId);render();});
+    hit.addEventListener('pointermove',e=>{if(!paintMode)return;const k=at(e);if(!k)return;const had=cells.has(k);if(paintMode==='paint'&&!had){cells.add(k);render();}if(paintMode==='erase'&&had){cells.delete(k);render();}});
+    const A=cells.size,P=perim(cells);
+    s=`<b>Area:</b> ${A} square unit${A===1?'':'s'} &nbsp; <b style="color:#dc2626">Perimeter:</b> ${P} unit${P===1?'':'s'}`;
+    if(goal){s+=goal.t==='P'?`<br>🎯 Make shapes with a perimeter of <b>${goal.v}</b>. What's the biggest area you can make? The smallest?`+(P===goal.v?` ✓ Perimeter ${P}! This one has area ${A}.`:''):`<br>🎯 Make shapes with an area of <b>${goal.v}</b>. Which has the longest perimeter? The shortest?`+(A===goal.v?` ✓ Area ${A}! This one has perimeter ${P}.`:'');}
+    else s+='<br>Tap or drag across the squares to build a shape.';
+  }
+  if(tab==='cover'){
+    const w=cov.w,h=cov.h,x0=(1000-w*U)/2,y0=40;svg.setAttribute('viewBox',`0 0 1000 ${Math.max(300,h*U+120)}`);
+    if(cov.grid==='behind')grid(w+2,h+2,x0-U,y0-U,'#94a3b8');
+    el('rect',{x:x0,y:y0,width:w*U,height:h*U,fill:'#fef3c7',stroke:'#1f2937','stroke-width':3},svg);
+    for(const k of cov.placed){const [x,y]=k.split(',').map(Number);if(cov.unit==='sq')el('rect',{x:x0+x*U+1,y:y0+y*U+1,width:U-2,height:U-2,fill:'#60a5fa',stroke:'#1e3a8a','stroke-width':1.5},svg);else el('circle',{cx:x0+x*U+U/2,cy:y0+y*U+U/2,r:U/2-1,fill:'#fb923c',stroke:'#9a3412','stroke-width':1.5},svg);}
+    if(cov.grid==='top')grid(w,h,x0,y0,'#1f2937');
+    const hit=el('rect',{x:x0,y:y0,width:w*U,height:h*U,fill:'transparent',style:'cursor:pointer'},svg);
+    hit.addEventListener('pointerdown',e=>{const p=pt(svg,e),x=Math.floor((p.x-x0)/U),y=Math.floor((p.y-y0)/U),k=key(x,y);cov.placed.has(k)?cov.placed.delete(k):cov.placed.add(k);render();});
+    txt(svg,x0+w*U/2,y0+h*U+34,`${w} units`,16,'#475569','700');txt(svg,x0-14,y0+h*U/2+5,`${h} units`,16,'#475569','700','end');
+    const n=cov.placed.size,full=n===w*h;
+    s=cov.unit==='ci'?`${n} circles placed. `+(full?'Look at the gaps! Circles leave gaps, so they are not good units for measuring area.':'Tap inside the rectangle to place circles.'):`${n} square${n===1?'':'s'} placed.`+(full?` The rectangle is covered: <b>${h} rows of ${w} = ${h} × ${w} = ${w*h} square units</b>.`:' Tap to place squares, or fill it one row at a time. How many in a row? How many rows?');
+  }
+  if(tab==='L'){
+    if(!Lst.W){Lst.W=6;Lst.H=4;Lst.cw=3;Lst.ch=2;}
+    const {W,H,cw,ch}=Lst,x0=(1000-(W+4)*U)/2+U*2,y0=40;svg.setAttribute('viewBox',`0 0 1000 ${Math.max(360,(H+3)*U+60)}`);
+    grid(Math.max(W,W+cw)+6,H+3,x0-2*U,y0-U+0);
+    // L = WxH rectangle minus top-right cw x ch notch
+    const Lpts=`${x0},${y0} ${x0+(W-cw)*U},${y0} ${x0+(W-cw)*U},${y0+ch*U} ${x0+W*U},${y0+ch*U} ${x0+W*U},${y0+H*U} ${x0},${y0+H*U}`;
+    const area=W*H-cw*ch,how=Lst.how;
+    const R=(x,y,w,h,c,dash)=>el('rect',{x:x0+x*U,y:y0+y*U,width:w*U,height:h*U,fill:c,stroke:'#1f2937','stroke-width':2.5,'stroke-dasharray':dash||'none',opacity:.85},svg);
+    if(!how||how==='none'){el('polygon',{points:Lpts,fill:'#bfdbfe',stroke:'#1f2937','stroke-width':3},svg);s=`What is the area of this L-shape? Choose a way to find it. (Each square is 1 square unit.)`;}
+    if(how==='across'){R(0,0,W-cw,ch,'#fca5a5');R(0,ch,W,H-ch,'#93c5fd');s=`Cut across: ${W-cw} × ${ch} = ${(W-cw)*ch} and ${W} × ${H-ch} = ${W*(H-ch)}. Area = ${(W-cw)*ch} + ${W*(H-ch)} = <b>${area} square units</b>.`;}
+    if(how==='down'){R(0,0,W-cw,H,'#fca5a5');R(W-cw,ch,cw,H-ch,'#93c5fd');s=`Cut down: ${W-cw} × ${H} = ${(W-cw)*H} and ${cw} × ${H-ch} = ${cw*(H-ch)}. Area = <b>${area} square units</b>.`;}
+    if(how==='move'){R(0,ch,W,H-ch,'#93c5fd');R(W,H-ch-0,W-cw,ch,'#fca5a5');R(0,0,W-cw,ch,'none','6 5');
+      el('path',{d:`M${x0+(W-cw)*U/2} ${y0+ch*U/2} C${x0+W*U} ${y0-20} ${x0+(W+ (W-cw)/2)*U} ${y0} ${x0+(W+(W-cw)/2)*U} ${y0+(H-ch)*U-4}`,fill:'none',stroke:'#dc2626','stroke-width':3,'marker-end':''},svg);
+      s=H-ch===ch?`Move the top piece to the end: it makes one long rectangle ${W+W-cw} × ${ch} = <b>${area} square units</b>.`:`Move the top piece (${W-cw} × ${ch}) next to the bottom piece (${W} × ${H-ch}): ${(W-cw)*ch} + ${W*(H-ch)} = <b>${area} square units</b>.`;}
+    if(how==='sub'){R(0,0,W,H,'#93c5fd');R(W-cw,0,cw,ch,'#fff','8 5');txt(svg,x0+(W-cw/2)*U,y0+ch*U/2+6,'−',30,'#dc2626','800');s=`Make a big rectangle, then take away the missing corner: ${W} × ${H} − ${cw} × ${ch} = ${W*H} − ${cw*ch} = <b>${area} square units</b>.`;}
+  }
+  if(tab==='para'){
+    const {b,h}=par,sh=par.s,x0=(1000-(b+8)*U)/2+U*2,y0=40,Y=v=>y0+(h-v)*U;svg.setAttribute('viewBox',`0 0 1000 ${Math.max(300,h*U+150)}`);
+    grid(b+8,h+2,x0-2*U,y0-U);
+    const P=[[0,0],[b,0],[b+sh,h],[sh,h]].map(([x,y])=>[x0+x*U,Y(y)]);
+    if(par.cut){
+      el('rect',{x:x0+sh*U,y:Y(h),width:b*U,height:h*U,fill:'#bbf7d0',stroke:'#1f2937','stroke-width':3},svg);
+      el('polygon',{points:`${x0},${Y(0)} ${x0+sh*U},${Y(0)} ${x0+sh*U},${Y(h)}`,fill:'#fff',stroke:'#94a3b8','stroke-width':2,'stroke-dasharray':'6 5'},svg);
+      el('polygon',{points:`${x0+b*U},${Y(0)} ${x0+(b+sh)*U},${Y(0)} ${x0+(b+sh)*U},${Y(h)}`,fill:'#fca5a5',stroke:'#1f2937','stroke-width':2.5},svg);
+      s=`Cut the triangle off one end and move it to the other end: the parallelogram becomes a <b>${b} × ${h} rectangle</b>. Area = base × height = ${b} × ${h} = <b>${b*h} square units</b>.`;
+    } else {
+      el('polygon',{points:P.map(p=>p.join(',')).join(' '),fill:'#bfdbfe',stroke:'#1f2937','stroke-width':3},svg);
+      if(par.tri){el('line',{x1:P[1][0],y1:P[1][1],x2:P[3][0],y2:P[3][1],stroke:'#dc2626','stroke-width':3},svg);el('polygon',{points:[P[0],P[1],P[3]].map(p=>p.join(',')).join(' '),fill:'#fde68a',opacity:.8},svg);
+        s=`The diagonal splits the parallelogram into <b>2 identical triangles</b>. Each triangle is half: ${b} × ${h} ÷ 2 = <b>${b*h/2} square units</b>.`;}
+      else s=`Parallelogram: base ${b}, height ${h}. Drag the orange handle to lean it. Does the area change? Try "Cut and move the triangle".`;
+      el('line',{x1:P[3][0],y1:P[3][1],x2:P[3][0],y2:Y(0),stroke:'#7c3aed','stroke-width':2,'stroke-dasharray':'5 4'},svg);txt(svg,P[3][0]+6,Y(h/2),'height '+h,14,'#7c3aed','700','start');
+      const hd=el('circle',{cx:P[2][0],cy:P[2][1],r:12,fill:'#f97316',stroke:'#fff','stroke-width':3,style:'cursor:ew-resize'},svg);
+      hd.addEventListener('pointerdown',e=>{svg.setPointerCapture(e.pointerId);paintMode='shear';e.preventDefault();});
+    }
+    txt(svg,x0+b*U/2+(par.cut?sh*U:0),Y(0)+28,'base '+b,15,'#1d4ed8','700');
+  }
+  $('say').innerHTML=s;
+}
+svg.addEventListener('pointermove',e=>{if(paintMode!=='shear')return;const p=pt(svg,e),x0=(1000-(par.b+8)*U)/2+U*2;par.s=Math.max(0,Math.min(4,Math.round((p.x-x0)/U-par.b)));render();});
+svg.addEventListener('pointerup',()=>{paintMode=null;});
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b));ctl();render();});
+ctl();render();
+</script></body></html>

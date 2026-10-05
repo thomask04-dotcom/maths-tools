@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compare Lengths</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:16px;padding:8px 14px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#say{font-size:22px;padding:8px 14px;min-height:46px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Compare Lengths</span>
+<button id="newBtn">🔀 New objects</button>
+<button id="lineBtn">⇤ Line up the ends</button>
+<span>Measure with:</span><button data-u="cube" class="on">Cubes</button><button data-u="clip">Paperclips</button><button id="oneBtn">Only one unit (make, mark, move)</button>
+<button id="clearU">Clear units</button>
+</div>
+<div class="bar">
+<span>Question:</span><button data-q="longest">Which is longest?</button><button data-q="shortest">Which is shortest?</button><button id="countBtn">Show counts</button>
+</div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 560"></svg>
+<div class="hint">Drag objects left and right. Tap ➕ to lay one more unit under an object and ➖ to take one away. Measure from the very end, with no gaps and no overlaps.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),U=50,ROW=130,Y0=30,XL=110;
+const KINDS=[['pencil','#facc15'],['ribbon','#ec4899'],['crayon','#3b82f6'],['snake','#22c55e'],['straw','#f97316'],['stick','#a16207']];
+let single=false,objs=[],unit='cube',drag=null,q=null,showCount=false;
+function newObjs(){
+  const lens=new Set();while(lens.size<4)lens.add(3+Math.floor(Math.random()*11));
+  const kinds=KINDS.slice().sort(()=>Math.random()-.5);
+  objs=[...lens].map((L,i)=>({kind:kinds[i][0],c:kinds[i][1],len:L,x:XL+40+Math.random()*(830-XL-L*U-40),units:0}));
+  q=null;say('Which object do you think is the longest? Drag them to check.');render();
+}
+function drawObj(g,o,x,y){
+  const w=o.len*U,h=34;
+  if(o.kind==='pencil'){el('rect',{x,y,width:w-34,height:h,fill:o.c,stroke:'#1f2937','stroke-width':2},g);el('rect',{x,y,width:14,height:h,fill:'#f9a8d4',stroke:'#1f2937','stroke-width':2},g);el('polygon',{points:`${x+w-34},${y} ${x+w},${y+h/2} ${x+w-34},${y+h}`,fill:'#fde68a',stroke:'#1f2937','stroke-width':2},g);el('polygon',{points:`${x+w-10},${y+h/2-6} ${x+w},${y+h/2} ${x+w-10},${y+h/2+6}`,fill:'#1f2937'},g);}
+  else if(o.kind==='ribbon'){el('path',{d:`M${x} ${y} H${x+w} L${x+w-12} ${y+h/2} L${x+w} ${y+h} H${x} L${x+12} ${y+h/2} Z`,fill:o.c,stroke:'#1f2937','stroke-width':2},g);}
+  else if(o.kind==='crayon'){el('rect',{x,y:y+2,width:w-24,height:h-4,rx:4,fill:o.c,stroke:'#1f2937','stroke-width':2},g);el('polygon',{points:`${x+w-24},${y+4} ${x+w},${y+h/2} ${x+w-24},${y+h-4}`,fill:o.c,stroke:'#1f2937','stroke-width':2},g);el('rect',{x:x+w*0.3,y:y+2,width:w*0.3,height:h-4,fill:'#fff',opacity:.5},g);}
+  else if(o.kind==='snake'){let d=`M${x} ${y+h/2}`;const n=Math.max(2,Math.round(o.len/1.5));for(let i=0;i<n;i++){const x1=x+(i+0.5)*(w-20)/n,x2=x+(i+1)*(w-20)/n;d+=` Q${x1} ${y+(i%2?h:0)} ${x2} ${y+h/2}`;}el('path',{d,fill:'none',stroke:o.c,'stroke-width':18,'stroke-linecap':'round'},g);el('circle',{cx:x+w-14,cy:y+h/2,r:14,fill:o.c,stroke:'#14532d','stroke-width':2},g);el('circle',{cx:x+w-10,cy:y+h/2-4,r:3,fill:'#111'},g);}
+  else if(o.kind==='straw'){el('rect',{x,y:y+6,width:w,height:h-12,rx:6,fill:'#fff',stroke:'#1f2937','stroke-width':2},g);for(let s=x+10;s<x+w-10;s+=22)el('line',{x1:s,y1:y+6,x2:s+12,y2:y+h-6,stroke:o.c,'stroke-width':5},g);}
+  else{el('rect',{x,y:y+4,width:w,height:h-8,rx:10,fill:o.c,stroke:'#1f2937','stroke-width':2},g);el('path',{d:`M${x+w*0.3} ${y+10} l20 -12`,stroke:o.c,'stroke-width':6,'stroke-linecap':'round'},g);}
+}
+function render(){
+  svg.innerHTML='';
+  el('rect',{x:0,y:0,width:1000,height:560,fill:'#fff'},svg);
+  objs.forEach((o,i)=>{
+    const y=Y0+i*ROW;
+    el('rect',{x:0,y:y-10,width:1000,height:ROW-6,fill:i%2?'#f8fafc':'#fff'},svg);
+    const g=el('g',{style:'cursor:grab'},svg);drawObj(g,o,o.x,y+10);
+    el('rect',{x:o.x,y:y+6,width:o.len*U,height:44,fill:'transparent'},g);
+    g.addEventListener('pointerdown',e=>{drag={o,dx:pt(svg,e).x-o.x,moved:false};svg.setPointerCapture(e.pointerId);e.preventDefault();});
+    // units
+    if(single)for(let k=0;k<=o.units;k++){if(k===0&&!o.units)break;const mx=o.x+k*U;el('line',{x1:mx,x2:mx,y1:y+52,y2:y+104,stroke:'#dc2626','stroke-width':2.5},svg);}
+    for(let k=single?Math.max(0,o.units-1):0;k<o.units;k++){const ux=o.x+k*U,uy=y+56;
+      if(unit==='cube'){el('rect',{x:ux+1,y:uy,width:U-2,height:U-8,fill:['#60a5fa','#f87171'][k%2],stroke:'#1f2937','stroke-width':1.5},svg);}
+      else{el('rect',{x:ux+3,y:uy+10,width:U-6,height:20,rx:10,fill:'none',stroke:'#64748b','stroke-width':4},svg);el('rect',{x:ux+10,y:uy+15,width:U-22,height:10,rx:5,fill:'none',stroke:'#64748b','stroke-width':3},svg);}
+    }
+    if(showCount&&o.units)txt(svg,o.x+o.units*U+12,y+88,`${o.units} ${unit==='cube'?'cube':'paperclip'}${o.units>1?'s':''}`,18,'#334155','700','start');
+    const btn=(x,label,fn)=>{const b=el('g',{style:'cursor:pointer'},svg);el('rect',{x,y:y+60,width:40,height:36,rx:8,fill:'#fff',stroke:'#94a3b8'},b);txt(b,x+20,y+85,label,18);b.addEventListener('pointerdown',ev=>{ev.stopPropagation();fn();});};
+    btn(10,'➕',()=>{if(o.units<18){o.units++;render();}});btn(56,'➖',()=>{if(o.units>0){o.units--;render();}});
+  });
+  el('line',{x1:XL,x2:XL,y1:10,y2:550,stroke:'#dc2626','stroke-width':2,'stroke-dasharray':'6 6'},svg);
+}
+svg.addEventListener('pointermove',e=>{if(!drag)return;drag.moved=true;const p=pt(svg,e);let x=p.x-drag.dx;if(Math.abs(x-XL)<14)x=XL;drag.o.x=Math.max(XL,Math.min(990-drag.o.len*U,x));render();});
+svg.addEventListener('pointerup',()=>{if(!drag)return;const o=drag.o,moved=drag.moved;drag=null;if(q&&!moved)answer(o);});
+function say(s){$('say').innerHTML=s;}
+function answer(o){
+  const L=objs.map(x=>x.len),want=q==='longest'?Math.max(...L):Math.min(...L);
+  if(o.len===want){say(`✓ Yes! The ${o.kind} is the ${q}.`);q=null;}
+  else say(`Not the ${o.kind}. Try lining up the ends, or measuring each one.`);
+}
+document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{q=b.dataset.q;say(`Tap the ${q} object.`);});
+$('newBtn').onclick=newObjs;
+$('lineBtn').onclick=()=>{objs.forEach(o=>o.x=XL);render();};
+document.querySelectorAll('[data-u]').forEach(b=>b.onclick=()=>{unit=b.dataset.u;document.querySelectorAll('[data-u]').forEach(x=>x.classList.toggle('on',x===b));render();});
+$('clearU').onclick=()=>{objs.forEach(o=>o.units=0);render();};
+$('countBtn').onclick=e=>{showCount=!showCount;e.target.classList.toggle('on',showCount);render();};
+$('oneBtn').onclick=e=>{single=!single;e.target.classList.toggle('on',single);render();};
+newObjs();
+</script></body></html>

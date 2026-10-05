@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Double Number Line</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:14px}
+.title{font-weight:700;margin-right:6px;font-size:16px}
+button,select,input{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+label{display:flex;align-items:center;gap:4px}
+.grp{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:10px}
+.grp.top{background:#dbeafe}.grp.bot{background:#dcfce7}
+.grp b{font-size:13px}
+input.name{width:120px}input.num{width:74px}input.unit{width:50px}
+#challengeBar{display:none;background:#fef9c3}
+#answer{width:100px}
+#feedback{font-weight:600}
+#score{margin-left:auto;font-weight:600}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Double Number Line</span>
+<label>Example <select id="preset">
+<option>Fractions and percentages</option><option>Decimals and percentages</option><option>Shopping</option><option>Travel</option><option>Recipe</option><option>Custom</option></select></label>
+<label>Equal parts <select id="parts"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>8</option><option>10</option><option>12</option><option>20</option></select></label>
+<button id="markBtn" class="on">Marker</button>
+<button id="chalBtn">Challenge mode</button>
+</div>
+<div class="bar">
+<span class="grp top"><b>Top</b><input class="name" id="tName"><label>ends at <input class="num" id="tEnd" type="number" step="any"></label><label>unit <input class="unit" id="tUnit"></label>
+<select id="tFmt"><option value="num">Numbers</option><option value="frac">Fractions</option></select>
+<button id="tShow" class="on">Show labels</button></span>
+<span class="grp bot"><b>Bottom</b><input class="name" id="bName"><label>ends at <input class="num" id="bEnd" type="number" step="any"></label><label>unit <input class="unit" id="bUnit"></label>
+<button id="bShow" class="on">Show labels</button></span>
+</div>
+<div class="bar" id="challengeBar">
+<span id="question"></span>
+<input id="answer" placeholder="Answer"><button id="checkBtn">Check</button>
+<button id="nextBtn">New question</button>
+<span id="feedback"></span><span id="score"></span>
+</div>
+<svg id="svg" viewBox="0 0 1000 350"></svg>
+<div class="hint">Drag the red marker along the lines to see matching values. Hide the labels on one line and tap a "?" to reveal it. Challenge mode asks for the missing value at the marker. Fractions such as 3/4 are accepted as answers.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,anchor,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b){[a,b]=[b,a%b];}return a;}
+function frac(p,x,yMid,f,fs,fill){
+  fill=fill||'#1f2937';
+  if(f.t!==undefined){txt(p,x,yMid+fs*0.35,f.t,fs,fill);return;}
+  const lead=f.w?String(f.w):'';
+  const cw=fs*0.6,fw=cw*Math.max(String(f.n).length,String(f.d).length)+4,lw=lead?cw*lead.length+3:0,x0=x-(lw+fw)/2;
+  if(lead)txt(p,x0,yMid+fs*0.35,lead,fs,fill,'start');
+  const cx=x0+lw+fw/2;
+  txt(p,cx,yMid-fs*0.2,f.n,fs*0.85,fill);
+  el('line',{x1:cx-fw/2,x2:cx+fw/2,y1:yMid,y2:yMid,stroke:fill,'stroke-width':1.4,'pointer-events':'none'},p);
+  txt(p,cx,yMid+fs*0.85,f.d,fs*0.85,fill);
+}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+
+const PRESETS=[
+ {n:4,t:['Fraction',1,'','frac'],b:['Percentage',100,'%']},
+ {n:10,t:['Decimal',1,'','num'],b:['Percentage',100,'%']},
+ {n:5,t:['Items',5,'','num'],b:['Cost',12.5,'$']},
+ {n:8,t:['Hours',4,'h','num'],b:['Distance',240,'km']},
+ {n:6,t:['Cups of flour',3,'','num'],b:['Cookies',36,'']},
+ null];
+const svg=document.getElementById('svg');
+const L=130,R=930,TY=120,BY=240;
+const TC='#1d4ed8',BC='#15803d',MC='#dc2626';
+let n=4,top_={},bot={},markOn=true,mk=2,dragging=false,revT=new Set(),revB=new Set();
+let chal=false,q=null,score=0,tries=0;
+const $=id=>document.getElementById(id);
+
+function X(i){return L+i*(R-L)/n;}
+// value at tick i (i can be fractional? no - integer ticks only)
+function unitStr(v,u){
+  if(u==='$')return '$'+v;
+  if(!u)return v;
+  if(u==='%')return v+'%';
+  return v+' '+u;
+}
+function numStr(v,u){
+  if(u==='$')return '$'+(Math.round(v*100)/100).toFixed(2);
+  const r=Math.round(v*1000)/1000,exact=Math.abs(r-v)<1e-9;
+  return (exact?'':'≈')+unitStr(exact?r:(Math.round(v*100)/100),u);
+}
+// fraction of end*i/n, as mixed numeral object
+function fracObj(i,line){
+  const end=line.end;
+  if(!Number.isInteger(end))return {t:numStr(end*i/n,line.unit)};
+  let num=end*i,den=n;if(num===0)return {t:'0'};
+  const g=gcd(num,den);num/=g;den/=g;
+  if(den===1)return {t:String(num)};
+  const w=Math.floor(num/den);return {w,n:num-w*den,d:den};
+}
+function label(line,i){return line.fmt==='frac'?fracObj(i,line):{t:numStr(line.end*i/n,line.unit)};}
+function val(line,i){return line.end*i/n;}
+
+function drawLine(line,y,col,show,rev,above){
+  el('line',{x1:L-10,x2:R+25,y1:y,y2:y,stroke:col,'stroke-width':3,'pointer-events':'none'},svg);
+  el('polygon',{points:`${R+35},${y} ${R+22},${y-7} ${R+22},${y+7}`,fill:col,'pointer-events':'none'},svg);
+  txt(svg,L-20,y+5,line.name,15,col,'end','700');
+  const fs=n>12?13:16,ly=above?y-34:y+36;
+  for(let i=0;i<=n;i++){
+    const x=X(i);
+    el('line',{x1:x,x2:x,y1:y-12,y2:y+12,stroke:col,'stroke-width':i===0||i===n?3:2,'pointer-events':'none'},svg);
+    const visible=show||rev.has(i)||(chal&&(i===0||i===n));
+    if(chal&&q&&i===q.i)continue;
+    if(visible){frac(svg,x,ly,label(line,i),fs,col);}
+    else{
+      const g=el('g',{style:'cursor:pointer'},svg);
+      el('rect',{x:x-15,y:ly-14,width:30,height:28,rx:7,fill:'#fff',stroke:col,'stroke-width':1.5,'stroke-dasharray':'4 3'},g);
+      txt(g,x,ly+6,'?',16,col,'middle','700');
+      g.addEventListener('pointerdown',e=>{e.stopPropagation();rev.add(i);render();});
+    }
+  }
+}
+function render(){
+  svg.innerHTML='';
+  el('rect',{x:0,y:0,width:1000,height:350,fill:'#fff'},svg);
+  // faint connectors between matching ticks
+  for(let i=0;i<=n;i++)el('line',{x1:X(i),x2:X(i),y1:TY+14,y2:BY-14,stroke:'#cbd5e1','stroke-width':1,'stroke-dasharray':'2 4','pointer-events':'none'},svg);
+  drawLine(top_,TY,TC,$('tShow').classList.contains('on'),revT,true);
+  drawLine(bot,BY,BC,$('bShow').classList.contains('on'),revB,false);
+  if(markOn||chal){
+    const i=chal&&q?q.i:mk,x=X(i);
+    el('line',{x1:x,x2:x,y1:TY-6,y2:BY+6,stroke:MC,'stroke-width':3,'pointer-events':'none'},svg);
+    // value boxes
+    const boxes=[[TY-78,top_,TC,'t'],[BY+58,bot,BC,'b']];
+    for(const [by,line,col,side] of boxes){
+      el('rect',{x:x-46,y:by,width:92,height:46,rx:9,fill:'#fff',stroke:MC,'stroke-width':2.5,'pointer-events':'none'},svg);
+      if(chal&&q&&q.ask===side)txt(svg,x,by+31,'?',22,MC,'middle','700');
+      else frac(svg,x,by+23,label(line,i),18,col);
+    }
+    if(!chal){
+      const h=el('circle',{cx:x,cy:(TY+BY)/2,r:14,fill:MC,stroke:'#fff','stroke-width':3,style:'cursor:ew-resize'},svg);
+      txt(svg,x,(TY+BY)/2+5,'↔',14,'#fff','middle','700');
+      h.addEventListener('pointerdown',e=>{dragging=true;svg.setPointerCapture(e.pointerId);e.preventDefault();});
+    }
+  }
+}
+svg.addEventListener('pointermove',e=>{if(!dragging)return;const i=Math.max(0,Math.min(n,Math.round((pt(svg,e).x-L)/(R-L)*n)));if(i!==mk){mk=i;render();}});
+svg.addEventListener('pointerup',()=>{dragging=false;});
+
+function readInputs(){
+  top_={name:$('tName').value||'Top',end:+$('tEnd').value||1,unit:$('tUnit').value.trim(),fmt:$('tFmt').value};
+  bot={name:$('bName').value||'Bottom',end:+$('bEnd').value||1,unit:$('bUnit').value.trim()};
+  n=+$('parts').value;if(mk>n)mk=n;
+  revT.clear();revB.clear();
+  if(chal)newQ();else render();
+}
+function loadPreset(k){
+  const p=PRESETS[k];if(!p)return;
+  $('parts').value=p.n;
+  [$('tName').value,$('tEnd').value,$('tUnit').value,$('tFmt').value]=p.t;
+  [$('bName').value,$('bEnd').value,$('bUnit').value]=p.b;
+  mk=Math.min(mk,p.n);readInputs();
+}
+$('preset').addEventListener('change',e=>loadPreset(e.target.selectedIndex));
+['tName','tEnd','tUnit','tFmt','bName','bEnd','bUnit'].forEach(id=>$(id).addEventListener('input',()=>{$('preset').value='Custom';readInputs();}));
+$('parts').addEventListener('change',()=>readInputs());
+$('tShow').onclick=e=>{e.target.classList.toggle('on');revT.clear();render();};
+$('bShow').onclick=e=>{e.target.classList.toggle('on');revB.clear();render();};
+$('markBtn').onclick=e=>{markOn=!markOn;e.target.classList.toggle('on',markOn);render();};
+
+// ---- challenge mode ----
+function parseAns(s){
+  s=s.replace(/[$%,\s]/g,'').replace(/[a-z]+$/i,'');
+  let m=s.match(/^(\d+)\s*(\d+)\/(\d+)$/)||s.match(/^(\d+)[ ](\d+)\/(\d+)$/);
+  const mixed=$('answer').value.trim().match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)/);
+  if(mixed)return +mixed[1]+ +mixed[2]/ +mixed[3];
+  m=s.match(/^(-?\d*\.?\d+)\/(\d*\.?\d+)$/);if(m)return +m[1]/+m[2];
+  return s===''?NaN:+s;
+}
+function newQ(){
+  let i;do{i=1+Math.floor(Math.random()*(n-1||1));}while(n>2&&q&&i===q.i);
+  q={i,ask:Math.random()<0.5?'t':'b'};
+  const known=q.ask==='t'?bot:top_,unk=q.ask==='t'?top_:bot;
+  const kl=label(known,i),ks=kl.t!==undefined?kl.t:(kl.w?kl.w+' ':'')+kl.n+'/'+kl.d;
+  $('question').innerHTML=`When <b>${known.name}</b> is <b>${ks}</b>, what is <b>${unk.name}</b>?`;
+  $('answer').value='';$('feedback').textContent='';tries=0;render();$('answer').focus();
+}
+function check(){
+  if(!q)return;const line=q.ask==='t'?top_:bot,want=val(line,q.i),got=parseAns($('answer').value);
+  if(isNaN(got)){$('feedback').textContent='Type a number or fraction.';$('feedback').style.color='#92400e';return;}
+  const ok=Math.abs(got-want)<Math.max(0.006,Math.abs(want)*0.001);
+  tries++;
+  if(ok){score++;$('feedback').textContent='✓ Correct!';$('feedback').style.color='#15803d';q.ask='done';render();setTimeout(()=>{if(chal&&q&&q.ask==='done')newQ();},1400);}
+  else{$('feedback').textContent=tries>=2?'✗ Hint: what does each equal part add on the '+line.name+' line?':'✗ Not quite, try again.';$('feedback').style.color='#b91c1c';}
+  $('score').textContent='Score: '+score;
+}
+$('checkBtn').onclick=check;
+$('answer').addEventListener('keydown',e=>{if(e.key==='Enter')check();});
+$('nextBtn').onclick=newQ;
+$('chalBtn').onclick=e=>{
+  chal=!chal;e.target.classList.toggle('on',chal);$('challengeBar').style.display=chal?'flex':'none';
+  $('tShow').classList.toggle('on',!chal);$('bShow').classList.toggle('on',!chal);revT.clear();revB.clear();
+  if(chal){score=0;$('score').textContent='Score: 0';q=null;newQ();}else{q=null;render();}
+};
+loadPreset(0);
+</script></body></html>

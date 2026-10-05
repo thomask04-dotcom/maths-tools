@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bar Model</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input,select{font:inherit;font-size:15px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input{width:80px;text-align:center}
+input.nm{width:90px}
+#story{font-size:20px;padding:10px 14px;min-height:44px;background:#fffbeb;border-bottom:1px solid #fde68a}
+#eq{font-size:22px;padding:8px 14px;min-height:40px;font-weight:600}
+svg{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Bar Model</span>
+<button data-m="ppw" class="on">Part-part-whole</button><button data-m="cmp">Compare</button><button data-m="times">Times as many</button><button data-m="frac">Fraction of an amount</button><button data-m="pct">Percentages</button>
+</div>
+<div class="bar" id="inputs"></div>
+<div class="bar">
+<button id="newBtn">🎲 New word problem</button>
+<button id="hideBtn" class="on">Hide the answer</button>
+<button id="revBtn">👀 Reveal</button>
+</div>
+<div id="story"></div>
+<svg id="svg" viewBox="0 0 1000 330"></svg>
+<div id="eq"></div>
+<div class="hint">Bars are drawn to scale, so a longer bar means a bigger amount. Draw the bar model first, find the "?", then write the number sentence. You can type your own numbers in the boxes above, or press "New word problem".</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),COL=['#93c5fd','#fca5a5','#86efac','#fde68a','#d8b4fe'];
+const g3=n=>{const r=Math.round(n*100)/100,s=String(r);const [w,f]=s.split('.');return (w.length>4?w.replace(/\B(?=(\d{3})+(?!\d))/g,' '):w)+(f?'.'+f:'');};
+let mode='ppw',hide=true,revealed=false,story='';
+const S={ppw:{a:45,b:23,c:0,unk:'whole',na:'',nb:''},cmp:{a:68,b:45,na:'Kerry',nb:'Kim',unk:'diff'},times:{q:4,n:5,na:'Harry',nb:'Jake',unk:'more'},frac:{T:24,d:4,p:3,rev:false},pct:{T:150,p:30}};
+function inputsFor(){
+  const I=$('inputs'),s=S[mode];let h='';
+  const num=(k,label)=>`<label>${label} <input data-k="${k}" type="number" value="${s[k]}"></label>`;
+  const nm=(k,ph)=>`<input class="nm" data-k="${k}" value="${s[k]}" placeholder="${ph}">`;
+  const sel=(k,opts)=>`<select data-k="${k}">${opts.map(([v,l])=>`<option value="${v}" ${s[k]===v?'selected':''}>${l}</option>`).join('')}</select>`;
+  if(mode==='ppw')h=num('a','Part')+num('b','Part')+num('c','Part (0 = none)')+'<span>Unknown:</span>'+sel('unk',[['whole','the whole'],['a','first part'],['b','second part']]);
+  if(mode==='cmp')h=nm('na','name')+num('a','has')+nm('nb','name')+num('b','has')+'<span>Unknown:</span>'+sel('unk',[['diff','the difference'],['a','the bigger amount'],['b','the smaller amount']]);
+  if(mode==='times')h=nm('nb','name')+num('q','has')+nm('na','name')+num('n','has ... times as many')+'<span>Question:</span>'+sel('unk',[['big','how many does the 2nd person have?'],['more','how many more?'],['tot','how many altogether?']]);
+  if(mode==='frac')h=num('p','Fraction')+'<span style="font-size:22px">/</span>'+num('d','')+num('T','of')+sel('rev',[[false,'Find the part'],[true,'Find the whole (reverse)']]);
+  if(mode==='pct')h=num('p','Percentage %')+num('T','of');
+  I.innerHTML=h;
+  I.querySelectorAll('[data-k]').forEach(inp=>inp.addEventListener(inp.tagName==='SELECT'?'change':'input',()=>{const k=inp.dataset.k;let v=inp.value;if(inp.type==='number')v=+v;if(k==='rev')v=v==='true';s[k]=v;story='';revealed=false;render();}));
+}
+function segBar(y,segs,scale,x0,h,label){
+  let x=x0;
+  segs.forEach(sg=>{const w=sg.v*scale;
+    el('rect',{x,y,width:w,height:h,fill:sg.fill,stroke:'#1f2937','stroke-width':2.5},svg);
+    if(w>24)txt(svg,x+w/2,y+h/2+7,sg.q&&hide&&!revealed?'?':(sg.t!==undefined?sg.t:g3(sg.v)),w<50?14:20,sg.q&&hide&&!revealed?'#dc2626':'#111827','800');
+    x+=w;});
+  if(label)txt(svg,x0-12,y+h/2+6,label,17,'#334155','700','end');
+  return x;
+}
+function brace(x1,x2,y,up,label,unknown){
+  const d=up?-1:1,m=(x1+x2)/2;
+  el('path',{d:`M${x1} ${y} q0 ${10*d} 10 ${10*d} H${m-10} q10 0 10 ${10*d} q0 ${-10*d} 10 ${-10*d} H${x2-10} q10 0 10 ${-10*d}`,fill:'none',stroke:'#475569','stroke-width':2.5},svg);
+  txt(svg,m,y+(up?-28:42),unknown&&hide&&!revealed?'?':label,20,unknown&&hide&&!revealed?'#dc2626':'#111827','800');
+}
+function render(){
+  svg.innerHTML='';const s=S[mode],X0=150,W=790;let eq='';
+  if(mode==='ppw'){
+    const parts=[s.a,s.b,s.c].filter(v=>v>0),whole=parts.reduce((a,b)=>a+b,0),sc=W/Math.max(whole,1);
+    el('rect',{x:X0,y:60,width:whole*sc,height:60,fill:'#e2e8f0',stroke:'#1f2937','stroke-width':2.5},svg);
+    txt(svg,X0+whole*sc/2,98,s.unk==='whole'&&hide&&!revealed?'?':g3(whole),22,s.unk==='whole'&&hide&&!revealed?'#dc2626':'#111827','800');txt(svg,X0-12,96,'Whole',17,'#334155','700','end');
+    segBar(140,parts.map((v,i)=>({v,fill:COL[i],q:(i===0&&s.unk==='a')||(i===1&&s.unk==='b')})),sc,X0,60,'Parts');
+    const ans=s.unk==='whole'?whole:s.unk==='a'?s.a:s.b,A=hide&&!revealed?'?':g3(ans);
+    eq=s.unk==='whole'?`${parts.map(g3).join(' + ')} = ${A}`:s.unk==='a'?`${g3(whole)} − ${g3(s.b)}${s.c?' − '+g3(s.c):''} = ${A} &nbsp; or &nbsp; ${A} + ${g3(s.b)}${s.c?' + '+g3(s.c):''} = ${g3(whole)}`:`${g3(whole)} − ${g3(s.a)}${s.c?' − '+g3(s.c):''} = ${A}`;
+  }
+  if(mode==='cmp'){
+    const big=Math.max(s.a,s.b),small=Math.min(s.a,s.b),sc=W/Math.max(big,1),aBig=s.a>=s.b;
+    const nb=aBig?s.na:s.nb,ns=aBig?s.nb:s.na;
+    segBar(60,[{v:big,fill:COL[0],q:s.unk==='a'}],sc,X0,56,nb||'A');
+    segBar(170,[{v:small,fill:COL[1],q:s.unk==='b'}],sc,X0,56,ns||'B');
+    if(big>small){el('rect',{x:X0+small*sc,y:170,width:(big-small)*sc,height:56,fill:'none',stroke:'#7c3aed','stroke-width':2.5,'stroke-dasharray':'8 6'},svg);brace(X0+small*sc,X0+big*sc,236,false,g3(big-small),s.unk==='diff');}
+    const A=v=>hide&&!revealed?'?':g3(v);
+    eq=s.unk==='diff'?`${g3(big)} − ${g3(small)} = ${A(big-small)}`:s.unk==='a'?`${g3(small)} + ${g3(big-small)} = ${A(big)}`:`${g3(big)} − ${g3(big-small)} = ${A(small)}`;
+  }
+  if(mode==='times'){
+    const n=Math.max(1,Math.round(s.n)),q=s.q,sc=W/Math.max(n*q,1);
+    segBar(60,[{v:q,fill:COL[1]}],sc,X0,56,s.nb||'A');
+    segBar(170,Array.from({length:n},(_,i)=>({v:q,fill:i===0?COL[1]:COL[0]})),sc,X0,56,s.na||'B');
+    const A=v=>hide&&!revealed?'?':g3(v);
+    if(s.unk==='more'&&n>1){brace(X0+q*sc,X0+n*q*sc,236,false,g3((n-1)*q),true);eq=`${n} × ${g3(q)} − ${g3(q)} = ${A((n-1)*q)} &nbsp; or &nbsp; ${n-1} × ${g3(q)} = ${A((n-1)*q)}`;}
+    else if(s.unk==='tot'){brace(X0,X0+n*q*sc,236,false,g3((n+1)*q),true);eq=`${g3(q)} + ${n} × ${g3(q)} = ${n+1} × ${g3(q)} = ${A((n+1)*q)}`;}
+    else{brace(X0,X0+n*q*sc,236,false,g3(n*q),true);eq=`${n} × ${g3(q)} = ${A(n*q)} &nbsp; and &nbsp; ${A(n*q)} ÷ ${n} = ${g3(q)}`;}
+  }
+  if(mode==='frac'){
+    const d=Math.max(1,Math.round(s.d)),p=Math.max(0,Math.min(d,Math.round(s.p))),T=s.T;
+    if(!s.rev){const each=T/d,sc=W/Math.max(T,1);
+      brace(X0,X0+W,50,true,g3(T),false);
+      segBar(60,Array.from({length:d},(_,i)=>({v:each,fill:i<p?COL[3]:'#fff',q:i<p&&p===1})),sc,X0,64,'');
+      if(p>1)brace(X0,X0+p*each*sc,134,false,g3(p*each),true);
+      const A=v=>hide&&!revealed?'?':g3(v);
+      eq=`${g3(T)} ÷ ${d} = ${p===1?A(each):g3(each)}${p>1?` &nbsp;→&nbsp; ${p}/${d} of ${g3(T)} = ${p} × ${g3(each)} = ${A(p*each)}`:` &nbsp;→&nbsp; 1/${d} of ${g3(T)} = ${A(each)}`}`;
+    } else {const part=T,each=part/Math.max(p,1),whole=each*d,sc=W/Math.max(whole,1);
+      brace(X0,X0+p*each*sc,50,true,g3(part)+` is ${p}/${d}`,false);
+      segBar(60,Array.from({length:d},(_,i)=>({v:each,fill:i<p?COL[3]:'#fff',t:i<p?'':(hide&&!revealed?'':g3(each))})),sc,X0,64,'');
+      brace(X0,X0+whole*sc,134,false,g3(whole),true);
+      const A=v=>hide&&!revealed?'?':g3(v);
+      eq=`${g3(part)} ÷ ${p} = ${A(each)} (one ${d===2?'half':'part'}) &nbsp;→&nbsp; ${d} × ${hide&&!revealed?'?':g3(each)} = ${A(whole)}`;}
+  }
+  if(mode==='pct'){
+    const T=s.T,p=Math.max(0,Math.min(100,s.p)),sc=W/100;
+    for(let i=0;i<10;i++){const x=X0+i*10*sc;el('rect',{x,y:90,width:10*sc,height:64,fill:(i+1)*10<=p?COL[2]:'#fff',stroke:'#1f2937','stroke-width':2},svg);}
+    if(p%10){el('rect',{x:X0+Math.floor(p/10)*10*sc,y:90,width:(p%10)*sc,height:64,fill:COL[2],stroke:'none'},svg);}
+    for(let i=0;i<=10;i++){const x=X0+i*10*sc;txt(svg,x,80,i*10+'%',14,'#15803d','700');txt(svg,x,180,g3(T*i/10),14,'#334155','600');}
+    txt(svg,X0-12,128,'',16);
+    el('line',{x1:X0+p*sc,x2:X0+p*sc,y1:60,y2:195,stroke:'#dc2626','stroke-width':3},svg);
+    txt(svg,X0+p*sc,225,hide&&!revealed?`${p}% = ?`:`${p}% = ${g3(T*p/100)}`,20,'#dc2626','800');
+    const A=v=>hide&&!revealed?'?':g3(v);
+    eq=`10% of ${g3(T)} = ${g3(T/10)} &nbsp;→&nbsp; ${p}% of ${g3(T)} = ${p/10} × ${g3(T/10)} = ${A(T*p/100)}`;
+  }
+  $('eq').innerHTML=eq;$('story').innerHTML=story||'Type your own numbers above, or press 🎲 New word problem.';
+}
+const R=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const NAMES=['Mia','Jack','Aroha','Liam','Priya','Noah','Zara','Kai','Ella','Sam'];
+$('newBtn').onclick=()=>{
+  const s=S[mode],[n1,n2]=NAMES.slice().sort(()=>Math.random()-.5);revealed=false;
+  if(mode==='ppw'){s.a=R(12,80);s.b=R(8,60);s.c=0;s.unk=['whole','a','b'][R(0,2)];
+    story=s.unk==='whole'?`${n1} read ${s.a} pages on Saturday and ${s.b} pages on Sunday. How many pages did ${n1} read altogether?`:`${n1} had some stickers and was given ${s.b} more. Now ${n1} has ${s.a+s.b}. How many stickers did ${n1} have to start with?`;if(s.unk==='b')story=`A class has ${s.a+s.b} books. ${s.a} are on the shelf and the rest are on the tables. How many are on the tables?`;}
+  if(mode==='cmp'){s.na=n1;s.nb=n2;s.a=R(30,90);s.b=R(5,s.a-5);s.unk='diff';story=`${n1} has $${s.a} and ${n2} has $${s.b}. How much more money does ${n1} have than ${n2}?`;}
+  if(mode==='times'){s.nb=n1;s.na=n2;s.q=R(2,9);s.n=R(2,6);s.unk=['big','more','tot'][R(0,2)];story=`${n1} has ${s.q} books. ${n2} has ${s.n} times as many books as ${n1}. `+(s.unk==='big'?`How many books does ${n2} have?`:s.unk==='more'?`How many more books does ${n2} have?`:`How many books do they have altogether?`);}
+  if(mode==='frac'){s.d=[2,3,4,5,6,8,10][R(0,6)];s.p=R(1,s.d-1);s.rev=Math.random()<.35;const each=R(2,12);
+    if(!s.rev){s.T=each*s.d;story=`There are ${s.T} lamingtons. ${s.p}/${s.d} of them are eaten at morning tea. How many are eaten?`;}
+    else{s.T=each*s.p;story=`${n1} has spent ${s.p}/${s.d} of her savings, which is $${s.T}. How much did she have to start with?`;}}
+  if(mode==='pct'){s.T=[50,80,120,150,200,250,300,400,600][R(0,8)];s.p=R(1,9)*10;story=`A jacket costs $${s.T}. It is ${s.p}% off in the sale. How much money do you save?`;}
+  inputsFor();render();
+};
+$('hideBtn').onclick=e=>{hide=!hide;e.target.classList.toggle('on',hide);render();};
+$('revBtn').onclick=()=>{revealed=true;render();};
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));story='';revealed=false;inputsFor();render();});
+inputsFor();render();
+</script></body></html>

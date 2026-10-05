@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pattern Maker</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:16px;padding:8px 14px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#say{font-size:22px;padding:10px 14px;min-height:50px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Pattern Maker</span>
+<button id="newBtn">✨ Give me a pattern</button>
+<button id="checkBtn">✓ Check</button>
+<button id="undoBtn">↶ Undo</button>
+<button id="clearBtn">Clear</button>
+<button id="letBtn">Show letters (A B A B)</button>
+</div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 380"></svg>
+<div class="hint">Tap a shape at the bottom to add it to the next empty space, or tap a space to clear it. "Give me a pattern" starts a pattern for you to finish. "Show letters" shows the pattern's rule, such as A B B.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),N=12,S=74,G=6,X0=(1000-(N*S+(N-1)*G))/2;
+const SH=[
+ {k:'circle',c:'#ef4444'},{k:'square',c:'#2563eb'},{k:'triangle',c:'#eab308'},
+ {k:'star',c:'#16a34a'},{k:'diamond',c:'#9333ea'},{k:'heart',c:'#ec4899'}];
+let slots=Array(N).fill(null),given=0,target=null,letters=false,marks=null;
+function shape(p,k,x,y,r,c){
+  const st={fill:c,stroke:'#1f2937','stroke-width':2.5,'pointer-events':'none'};
+  if(k==='circle')el('circle',{cx:x,cy:y,r,...st},p);
+  else if(k==='square')el('rect',{x:x-r*0.85,y:y-r*0.85,width:r*1.7,height:r*1.7,rx:4,...st},p);
+  else if(k==='triangle')el('polygon',{points:`${x},${y-r} ${x+r*1.05},${y+r*0.8} ${x-r*1.05},${y+r*0.8}`,...st},p);
+  else if(k==='diamond')el('polygon',{points:`${x},${y-r} ${x+r*0.75},${y} ${x},${y+r} ${x-r*0.75},${y}`,...st},p);
+  else if(k==='star'){let s='';for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,rr=i%2?r*0.45:r;s+=`${x+rr*Math.cos(a)},${y+rr*Math.sin(a)} `;}el('polygon',{points:s,...st},p);}
+  else if(k==='heart')el('path',{d:`M${x} ${y+r*0.85} C${x-r*1.4} ${y-r*0.1} ${x-r*0.7} ${y-r*1.1} ${x} ${y-r*0.4} C${x+r*0.7} ${y-r*1.1} ${x+r*1.4} ${y-r*0.1} ${x} ${y+r*0.85}Z`,...st},p);
+}
+function letterOf(i){const seen=[];for(let j=0;j<=i;j++){const v=slots[j];if(v!==null&&!seen.includes(v))seen.push(v);}return slots[i]===null?'':'ABCDEF'[seen.indexOf(slots[i])];}
+function render(){
+  svg.innerHTML='';
+  for(let i=0;i<N;i++){
+    const x=X0+i*(S+G),y=40,g=el('g',{style:'cursor:pointer'},svg);
+    const m=marks&&marks[i];
+    el('rect',{x,y,width:S,height:S,rx:10,fill:i<given?'#f1f5f9':'#fff',stroke:m===false?'#dc2626':m===true?'#16a34a':'#94a3b8','stroke-width':m!==undefined&&m!==null?4:2,'stroke-dasharray':slots[i]===null?'6 5':'none'},g);
+    if(slots[i]!==null)shape(g,SH[slots[i]].k,x+S/2,y+S/2,S*0.34,SH[slots[i]].c);
+    if(letters&&slots[i]!==null)txt(svg,x+S/2,y+S+30,letterOf(i),24,'#475569','700');
+    g.addEventListener('pointerdown',()=>{if(i<given)return;slots[i]=null;marks=null;render();});
+  }
+  txt(svg,500,238,'Tap a shape to add it:',18,'#64748b');
+  SH.forEach((s,k)=>{const x=500+(k-2.5)*120,y=305,g=el('g',{style:'cursor:pointer'},svg);el('rect',{x:x-48,y:y-48,width:96,height:96,rx:14,fill:'#f8fafc',stroke:'#cbd5e1','stroke-width':2},g);shape(g,s.k,x,y,34,s.c);g.addEventListener('pointerdown',()=>add(k));});
+}
+function add(k){const i=slots.indexOf(null);if(i<0){say('The row is full! Press ✓ Check, or tap a space to clear it.');return;}slots[i]=k;marks=null;render();}
+function say(s){$('say').innerHTML=s;}
+const RULES=['AB','ABB','AAB','ABC','AABB','ABCD','ABBC'];
+$('newBtn').onclick=()=>{
+  const rule=RULES[Math.floor(Math.random()*RULES.length)],pick=[0,1,2,3,4,5].sort(()=>Math.random()-.5);
+  target=Array.from({length:N},(_,i)=>pick['ABCD'.indexOf(rule[i%rule.length])]);
+  given=Math.min(N-4,rule.length*2+(rule.length<3?2:0));
+  slots=target.map((v,i)=>i<given?v:null);marks=null;say('Finish the pattern! What comes next?');render();
+};
+$('checkBtn').onclick=()=>{
+  const filled=slots.filter(v=>v!==null).length;
+  if(!target){ // free-play: does the student's row repeat?
+    if(filled<4){say('Make a longer pattern first.');return;}
+    const row=slots.filter(v=>v!==null);let unit=0;
+    for(let L=1;L<=row.length/2;L++){if(row.every((v,i)=>v===row[i%L])){unit=L;break;}}
+    say(unit&&unit>1?`✓ That's a repeating pattern! The part that repeats is ${unit} shapes long.`:unit===1?'Every shape is the same. Try using two or more shapes that repeat.':'Hmm, I can\'t find a part that repeats. Can you fix it?');return;}
+  marks=slots.map((v,i)=>i<given?null:v===null?null:v===target[i]);
+  const wrong=marks.filter(m=>m===false).length,empty=slots.filter(v=>v===null).length;
+  say(wrong?`${wrong} shape${wrong>1?'s are':' is'} not right yet. Look for the part that repeats.`:empty?'✓ So far so good! Keep going.':'🎉 Well done! You finished the pattern.');render();
+};
+$('undoBtn').onclick=()=>{for(let i=N-1;i>=given;i--)if(slots[i]!==null){slots[i]=null;break;}marks=null;render();};
+$('clearBtn').onclick=()=>{slots=Array(N).fill(null);given=0;target=null;marks=null;say('Make your own pattern.');render();};
+$('letBtn').onclick=e=>{letters=!letters;e.target.classList.toggle('on',letters);render();};
+say('Make your own pattern, or press ✨ Give me a pattern.');render();
+</script></body></html>

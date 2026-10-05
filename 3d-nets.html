@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3D Nets</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,select{font:inherit;font-size:15px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input[type=range]{width:220px}
+#nets{display:none;gap:4px;align-items:center;flex-wrap:wrap}
+#nets button{padding:5px 9px}
+.wrap{display:flex;flex-wrap:wrap;gap:12px;padding:8px}
+svg{width:100%;max-width:620px;height:auto;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;background:#f8fafc;border-radius:14px}
+#info{flex:1;min-width:230px;font-size:17px;line-height:1.7}
+#info .big{font-size:24px;font-weight:800;color:#1e3a8a}
+#msg{font-weight:700}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">3D Nets</span>
+<select id="solid">
+<option value="cube">Cube</option><option value="rect">Rectangular prism</option><option value="tri">Triangular prism</option><option value="pent">Pentagonal prism</option><option value="hex">Hexagonal prism</option>
+<option value="sqpyr">Square pyramid</option><option value="tripyr">Triangular pyramid</option><option value="pentpyr">Pentagonal pyramid</option></select>
+<span id="nets">Cube net: <button data-n="0" class="on">1</button><button data-n="1" class="">2</button><button data-n="2" class="">3</button><button data-n="3" class="">4</button><button data-n="4" class="">5</button><button data-n="5" class="">6</button><button data-n="6" class="">7</button><button data-n="7" class="">8</button><button data-n="8" class="">9</button><button data-n="9" class="">10</button><button data-n="10" class="">11</button><button data-n="11" class="">12</button><button data-n="12" class="">13</button></span><span id="tnets" style="display:none;gap:6px;align-items:center">Net: <button data-tn="0" class="on">1</button><button data-tn="1">2</button></span>
+</div>
+<div class="bar">
+<button id="unfoldBtn">📄 Unfold</button>
+<input type="range" id="fold" min="0" max="100" value="0">
+<button id="foldBtn">📦 Fold</button>
+<button id="propBtn">Show properties</button>
+<button id="viewBtn">↺ Reset view</button><button id="skelBtn">Edges only (skeleton)</button>
+</div>
+<div class="wrap"><svg id="svg" viewBox="0 0 620 520"></svg><div id="info"></div></div>
+<div class="hint">Drag the slider, or press Fold and Unfold. Drag the picture to turn the shape around. With the cube, try nets 1 to 13. There are 11 different nets of a cube, and 2 of these don't work. Can you predict which ones will fold into a cube before you fold them? A triangular pyramid (tetrahedron) has 2 nets.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),RAD=Math.PI/180;
+// ---- small 3D maths ----
+function rotM(d,th){const [x,y,z]=d,c=Math.cos(th),s=Math.sin(th),C=1-c;return [[c+x*x*C,x*y*C-z*s,x*z*C+y*s],[y*x*C+z*s,c+y*y*C,y*z*C-x*s],[z*x*C-y*s,z*y*C+x*s,c+z*z*C]];}
+function mv(M,v){return [M[0][0]*v[0]+M[0][1]*v[1]+M[0][2]*v[2],M[1][0]*v[0]+M[1][1]*v[1]+M[1][2]*v[2],M[2][0]*v[0]+M[2][1]*v[1]+M[2][2]*v[2]];}
+function mm(A,B){return A.map((r,i)=>[0,1,2].map(j=>r[0]*B[0][j]+r[1]*B[1][j]+r[2]*B[2][j]));}
+const ID={R:[[1,0,0],[0,1,0],[0,0,1]],t:[0,0,0]};
+function comp(A,B){const Bt=mv(A.R,B.t);return {R:mm(A.R,B.R),t:[Bt[0]+A.t[0],Bt[1]+A.t[1],Bt[2]+A.t[2]]};}
+function apply(T,v){const r=mv(T.R,v);return [r[0]+T.t[0],r[1]+T.t[1],r[2]+T.t[2]];}
+// ---- net builders (2D, z = 0) ----
+function reg(n,side){const R=side/(2*Math.sin(Math.PI/n)),a0=-Math.PI/2-Math.PI/n;return Array.from({length:n},(_,i)=>[R*Math.cos(a0+i*2*Math.PI/n),R*Math.sin(a0+i*2*Math.PI/n)]);}
+function outward(a,b){const ex=b[0]-a[0],ey=b[1]-a[1],L=Math.hypot(ex,ey);return [ey/L,-ex/L];}
+function prism(base,H){
+  const n=base.length,F=[{v:base,parent:-1,type:'base'}];
+  for(let i=0;i<n;i++){const a=base[i],b=base[(i+1)%n],o=outward(a,b);F.push({v:[a,b,[b[0]+o[0]*H,b[1]+o[1]*H],[a[0]+o[0]*H,a[1]+o[1]*H]],parent:0,hinge:[a,b],fold:90,type:'side'});}
+  const a=base[0],b=base[1],o=outward(a,b),A=[a[0]+o[0]*H/2,a[1]+o[1]*H/2];
+  const top=base.map(P=>{const d=(P[0]-A[0])*o[0]+(P[1]-A[1])*o[1];return [P[0]-2*d*o[0],P[1]-2*d*o[1]];});
+  F.push({v:top,parent:1,hinge:[[a[0]+o[0]*H,a[1]+o[1]*H],[b[0]+o[0]*H,b[1]+o[1]*H]],fold:90,type:'top'});
+  return F;
+}
+function pyramid(base,h){
+  const n=base.length,cx=base.reduce((s,p)=>s+p[0],0)/n,cy=base.reduce((s,p)=>s+p[1],0)/n,F=[{v:base,parent:-1,type:'base'}];
+  for(let i=0;i<n;i++){const a=base[i],b=base[(i+1)%n],o=outward(a,b),m=[(a[0]+b[0])/2,(a[1]+b[1])/2],r=(m[0]-cx)*o[0]+(m[1]-cy)*o[1],sl=Math.hypot(r,h);
+    F.push({v:[a,b,[m[0]+o[0]*sl,m[1]+o[1]*sl]],parent:0,hinge:[a,b],fold:180-Math.atan2(h,r)/RAD,type:'side'});}
+  return F;
+}
+function cells(list,parents){
+  const sq=([x,y])=>[[x,y],[x+1,y],[x+1,y+1],[x,y+1]];
+  return list.map((c,i)=>{const v=sq(c);if(parents[i]<0)return {v,parent:-1,type:'base'};
+    const pv=sq(list[parents[i]]),sh=v.filter(p=>pv.some(q=>q[0]===p[0]&&q[1]===p[1]));return {v,parent:parents[i],hinge:sh,fold:90,type:'side'};});
+}
+function polyNet(polys,fold){
+  // build a folding tree from polygons by joining shared edges (breadth-first from the polygon with most neighbours)
+  const eqp=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1])<1e-6,share=(A,B)=>A.filter(p=>B.some(q=>eqp(p,q)));
+  const nb=polys.map((P,i)=>polys.map((Q,j)=>i!==j&&share(P,Q).length===2?j:-1).filter(j=>j>=0));
+  let root=0;nb.forEach((l,i)=>{if(l.length>nb[root].length)root=i;});
+  const par=Array(polys.length).fill(null);par[root]=-1;const q=[root];
+  while(q.length){const i=q.shift();for(const j of nb[i])if(par[j]===null){par[j]=i;q.push(j);}}
+  return polys.map((v,i)=>par[i]===-1?{v,parent:-1,type:'base'}:{v,parent:par[i],hinge:share(v,polys[par[i]]),fold,type:'side'});
+}
+const sq=([x,y])=>[[x,y],[x+1,y],[x+1,y+1],[x,y+1]];
+const R41=(a,b)=>[[0,1],[1,1],[2,1],[3,1],[a,2],[b,0]],R231=b=>[[1,1],[2,1],[3,1],[0,2],[1,2],[b,0]];
+const NET_LIST=[
+  [R41(1,1),true],[R231(1),true],[[[0,1],[1,1],[2,1],[2,0],[3,0],[4,0]],true],[R41(0,2),true],[[[0,0],[1,0],[2,0],[3,0],[4,0],[1,1]],false],
+  [R41(0,0),true],[R231(2),true],[[[0,0],[1,0],[1,1],[2,1],[2,2],[3,2]],true],[R41(0,3),true],[[[0,0],[1,0],[0,1],[1,1],[0,2],[1,2]],false],
+  [R41(1,2),true],[R231(3),true],[R41(0,1),true]];
+const CUBE_NETS=NET_LIST.map(([c])=>polyNet(c.map(sq),90));
+const NET_OK=NET_LIST.map(([,ok])=>ok);
+const TH=Math.sqrt(3)/2*1.6,TS=1.6,TFOLD=180-Math.acos(1/3)*180/Math.PI;
+const TET_STRIP=polyNet([[[0,0],[TS,0],[TS/2,TH]],[[TS,0],[TS/2,TH],[TS*1.5,TH]],[[TS,0],[2*TS,0],[TS*1.5,TH]],[[2*TS,0],[TS*1.5,TH],[TS*2.5,TH]]],TFOLD);
+let tetIdx=0,skeletal=false;
+const SOLIDS={
+  cube:{name:'Cube',F:6,E:12,V:8,faces:'6 squares',make:()=>CUBE_NETS[netIdx]},
+  rect:{name:'Rectangular prism',F:6,E:12,V:8,faces:'6 rectangles',make:()=>prism([[0,0],[2.2,0],[2.2,1.2],[0,1.2]],1)},
+  tri:{name:'Triangular prism',F:5,E:9,V:6,faces:'2 triangles, 3 rectangles',make:()=>prism(reg(3,1.3),2)},
+  pent:{name:'Pentagonal prism',F:7,E:15,V:10,faces:'2 pentagons, 5 rectangles',make:()=>prism(reg(5,0.9),1.4)},
+  hex:{name:'Hexagonal prism',F:8,E:18,V:12,faces:'2 hexagons, 6 rectangles',make:()=>prism(reg(6,0.8),1.3)},
+  sqpyr:{name:'Square pyramid',F:5,E:8,V:5,faces:'1 square, 4 triangles',make:()=>pyramid(reg(4,1.4),1.2)},
+  tripyr:{name:'Triangular pyramid',F:4,E:6,V:4,faces:'4 triangles',make:()=>tetIdx?TET_STRIP:pyramid(reg(3,1.6),1.6*Math.sqrt(2/3))},
+  pentpyr:{name:'Pentagonal pyramid',F:6,E:10,V:6,faces:'1 pentagon, 5 triangles',make:()=>pyramid(reg(5,1),1.3)}};
+const COL={base:[96,165,250],side:[251,191,36],top:[52,211,153]};
+let key='cube',netIdx=0,faces=[],t=0,yaw=-25,pitch=-50,scale=100,anim=null,props=false,dragV=null;
+function load(){
+  faces=SOLIDS[key].make();
+  // orient each hinge so the child lies to its left, which makes +angle fold upward
+  faces.forEach(f=>{if(f.parent<0)return;const [p,q]=f.hinge,c=[f.v.reduce((s,v)=>s+v[0],0)/f.v.length,f.v.reduce((s,v)=>s+v[1],0)/f.v.length];
+    if((q[0]-p[0])*(c[1]-p[1])-(q[1]-p[1])*(c[0]-p[0])<0)f.hinge=[q,p];});
+  const all=faces.flatMap(f=>f.v),cx=all.reduce((s,v)=>s+v[0],0)/all.length,cy=all.reduce((s,v)=>s+v[1],0)/all.length;
+  scale=200/Math.max(...all.map(v=>Math.hypot(v[0]-cx,v[1]-cy)));
+  render();
+}
+function worldFaces(){
+  const T=[];
+  const get=i=>{if(T[i])return T[i];const f=faces[i];
+    if(f.parent<0)return T[i]=ID;
+    const [p,q]=f.hinge,d0=[q[0]-p[0],q[1]-p[1],0],L=Math.hypot(d0[0],d0[1]),d=[d0[0]/L,d0[1]/L,0];
+    const R=rotM(d,f.fold*RAD*t),P=[p[0],p[1],0],RP=mv(R,P),H={R,t:[P[0]-RP[0],P[1]-RP[1],P[2]-RP[2]]};
+    return T[i]=comp(get(f.parent),H);};
+  faces.forEach((f,i)=>get(i));
+  return faces.map((f,i)=>({type:f.type,pts:f.v.map(v=>apply(T[i],[v[0],v[1],0]))}));
+}
+function render(){
+  svg.innerHTML='';
+  const W=worldFaces(),all=W.flatMap(f=>f.pts);
+  const mn=[0,1,2].map(k=>Math.min(...all.map(p=>p[k]))),mx=[0,1,2].map(k=>Math.max(...all.map(p=>p[k]))),c=[0,1,2].map(k=>(mn[k]+mx[k])/2);
+  const cy_=Math.cos(yaw*RAD),sy_=Math.sin(yaw*RAD),cp=Math.cos(pitch*RAD),sp=Math.sin(pitch*RAD);
+  const view=p=>{const x=p[0]-c[0],y=p[1]-c[1],z=p[2]-c[2],x1=x*cy_-y*sy_,y1=x*sy_+y*cy_,y2=y1*cp-z*sp,z2=y1*sp+z*cp;return [x1,y2,z2];};
+  const V=W.map(f=>{const q=f.pts.map(view),depth=q.reduce((s,v)=>s+v[2],0)/q.length;
+    const a=[q[1][0]-q[0][0],q[1][1]-q[0][1],q[1][2]-q[0][2]],b=[q[2][0]-q[0][0],q[2][1]-q[0][1],q[2][2]-q[0][2]],n=[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],nl=Math.hypot(...n)||1;
+    return {type:f.type,q,depth,light:0.55+0.45*Math.abs(n[2]/nl)};}).sort((A,B)=>A.depth-B.depth);
+  for(const f of V){const [r,g,b]=COL[f.type].map(v=>Math.round(v*f.light));
+    el('polygon',{points:f.q.map(p=>`${310+p[0]*scale},${270-p[1]*scale}`).join(' '),fill:skeletal?'none':`rgb(${r},${g},${b})`,'fill-opacity':.93,stroke:skeletal?'#1e3a8a':'#1f2937','stroke-width':skeletal?3.5:2,'stroke-linejoin':'round'},svg);}
+  const S=SOLIDS[key];
+  let html=`<div class="big">${S.name}</div>`;
+  if(key==='cube')html+=`<div id="msg" style="color:${t>0.98?(NET_OK[netIdx]?'#15803d':'#b91c1c'):'#475569'}">${t>0.98?(NET_OK[netIdx]?'✓ Net '+(netIdx+1)+' folds into a cube!':'✗ Net '+(netIdx+1)+' does not make a cube. Some faces overlap and one side is left open.'):'Will net '+(netIdx+1)+' fold into a cube?'}</div>`;
+  if(props)html+=`<div><b>Faces:</b> ${S.F} (${S.faces})</div><div><b>Edges:</b> ${S.E}</div><div><b>Vertices:</b> ${S.V}</div>`;
+  html+=`<div style="margin-top:8px;font-size:14px;color:#64748b"><span style="color:#2563eb">■</span> base &nbsp; <span style="color:#d97706">■</span> ${key.includes('pyr')?'triangular faces':'side faces'}${key.includes('pyr')||key==='cube'?'':' &nbsp; <span style="color:#059669">■</span> top'}</div>`;
+  $('info').innerHTML=html;$('fold').value=Math.round(t*100);
+}
+function animate(to){cancelAnimationFrame(anim);const from=t,t0=performance.now(),dur=1800*Math.abs(to-from)+200;
+  const step=now=>{const k=Math.min(1,(now-t0)/dur),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;t=from+(to-from)*e;render();if(k<1)anim=requestAnimationFrame(step);};anim=requestAnimationFrame(step);}
+$('foldBtn').onclick=()=>animate(1);$('unfoldBtn').onclick=()=>animate(0);
+$('fold').oninput=e=>{cancelAnimationFrame(anim);t=e.target.value/100;render();};
+$('solid').onchange=e=>{key=e.target.value;$('nets').style.display=key==='cube'?'flex':'none';$('tnets').style.display=key==='tripyr'?'flex':'none';t=0;load();};
+document.querySelectorAll('[data-tn]').forEach(b=>b.onclick=()=>{tetIdx=+b.dataset.tn;document.querySelectorAll('[data-tn]').forEach(x=>x.classList.toggle('on',x===b));t=0;load();});
+$('skelBtn').onclick=e=>{skeletal=!skeletal;e.target.classList.toggle('on',skeletal);render();};
+document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{netIdx=+b.dataset.n;document.querySelectorAll('[data-n]').forEach(x=>x.classList.toggle('on',x===b));t=0;load();});
+$('propBtn').onclick=e=>{props=!props;e.target.classList.toggle('on',props);render();};
+$('viewBtn').onclick=()=>{yaw=-25;pitch=-50;render();};
+svg.addEventListener('pointerdown',e=>{dragV={x:e.clientX,y:e.clientY,yaw,pitch};svg.setPointerCapture(e.pointerId);});
+svg.addEventListener('pointermove',e=>{if(!dragV)return;yaw=dragV.yaw+(e.clientX-dragV.x)*0.5;pitch=Math.max(-89,Math.min(0,dragV.pitch+(e.clientY-dragV.y)*0.4));render();});
+svg.addEventListener('pointerup',()=>{dragV=null;});
+$('nets').style.display='flex';
+load();
+</script></body></html>

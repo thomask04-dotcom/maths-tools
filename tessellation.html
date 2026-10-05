@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tessellation</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:6px 11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input[type=range]{width:220px}
+#say{font-size:19px;padding:8px 14px;min-height:44px;line-height:1.5}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Tessellation</span>
+<button data-s="tri" class="on">Any triangle</button><button data-s="quad">Any quadrilateral</button><button data-s="sq">Square</button><button data-s="hex">Regular hexagon</button><button data-s="pent">Regular pentagon</button><button data-s="oct">Regular octagon</button>
+</div>
+<div class="bar">
+<span>Tiles:</span><input type="range" id="count" min="1" max="120" value="120">
+<button id="pairBtn">Show the pair</button><button id="colBtn" class="on">Two colours</button><button id="sqBtn" style="display:none">Add squares to fill the gaps</button>
+</div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 560"></svg>
+<div class="hint">For the triangle and quadrilateral, drag the orange corners to make any shape you like. It will still tessellate! Each copy is either translated (slid) or rotated a half turn. Use the slider to build the tiling one tile at a time.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+let shape='tri',V={tri:[[430,300],[560,300],[470,210]],quad:[[440,300],[560,310],[545,220],[450,235]]},drag=null,pair=false,two=true,addSq=false;
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1]],sub=(a,b)=>[a[0]-b[0],a[1]-b[1]],mul=(a,k)=>[a[0]*k,a[1]*k];
+function reg(n,r,c,rot){return Array.from({length:n},(_,i)=>{const a=rot+i*2*Math.PI/n;return [c[0]+r*Math.cos(a),c[1]+r*Math.sin(a)];});}
+function angleAt(P,i){const n=P.length,a=P[(i+n-1)%n],b=P[i],c=P[(i+1)%n],v1=sub(a,b),v2=sub(c,b);let d=Math.atan2(v2[1],v2[0])-Math.atan2(v1[1],v1[0]);d=Math.abs(d*180/Math.PI);return d>180?360-d:d;}
+function tiles(){
+  const out=[];
+  if(shape==='tri'||shape==='quad'){
+    const P=V[shape];let base,rot,t1,t2;
+    if(shape==='tri'){const [A,B,C]=P;base=P;rot=[B,C,sub(add(B,C),A)].map(x=>x);rot=[C,B,sub(add(B,C),A)];t1=sub(B,A);t2=sub(C,A);}
+    else{const [A,B,C,D]=P,M=add(B,C);base=P;rot=P.map(p=>sub(M,p));t1=sub(sub(add(B,C),D),A);t2=sub(C,A);}
+    for(let i=-8;i<=8;i++)for(let j=-8;j<=8;j++){const off=add(mul(t1,i),mul(t2,j));out.push({p:base.map(q=>add(q,off)),c:0,i,j});out.push({p:rot.map(q=>add(q,off)),c:1,i,j});}
+  }
+  if(shape==='sq'){const s=80;for(let i=-8;i<=8;i++)for(let j=-6;j<=6;j++){const x=460+i*s,y=240+j*s;out.push({p:[[x,y],[x+s,y],[x+s,y+s],[x,y+s]],c:(i+j+100)%2,i,j});}}
+  if(shape==='hex'){const r=55;for(let i=-8;i<=8;i++)for(let j=-8;j<=8;j++){const c=[500+i*1.5*r,280+j*Math.sqrt(3)*r+(Math.abs(i)%2)*Math.sqrt(3)*r/2];out.push({p:reg(6,r,c,0),c:(i+100)%3,i,j});}}
+  if(shape==='pent'){const r=90,c0=[500,300];// three pentagons around one vertex
+    const v=reg(5,r,c0,-Math.PI/2)[2];for(let k=0;k<3;k++){const ang=k*108*Math.PI/180;const P=reg(5,r,c0,-Math.PI/2).map(p=>{const d=sub(p,v);return add(v,[d[0]*Math.cos(ang)-d[1]*Math.sin(ang),d[0]*Math.sin(ang)+d[1]*Math.cos(ang)]);});out.push({p:P,c:k%2,i:k,j:0});}}
+  if(shape==='oct'){const s=60,r=s/(2*Math.sin(Math.PI/8)),step=s+2*s/Math.SQRT2;for(let i=-6;i<=6;i++)for(let j=-5;j<=5;j++){const c=[500+i*step,280+j*step];out.push({p:reg(8,r,c,Math.PI/8),c:(i+j+100)%2,i,j});
+      if(addSq){const h=step/2,sc=[c[0]+h,c[1]+h],d=s/Math.SQRT2;out.push({p:[[sc[0],sc[1]-d],[sc[0]+d,sc[1]],[sc[0],sc[1]+d],[sc[0]-d,sc[1]]],c:2,i,j,sq:true});}}}
+  const cx=500,cy=280;out.forEach(t=>{const m=t.p.reduce((a,b)=>add(a,b),[0,0]);t.d=Math.hypot(m[0]/t.p.length-cx,m[1]/t.p.length-cy);});
+  return out.filter(t=>t.p.some(([x,y])=>x>-60&&x<1060&&y>-60&&y<620)).sort((a,b)=>a.d-b.d);
+}
+function render(){
+  svg.innerHTML='';const T=tiles(),n=Math.min(T.length,+$('count').value);
+  const COLS=two?['#60a5fa','#fbbf24','#f472b6']:['#60a5fa','#60a5fa','#60a5fa'];
+  T.slice(0,n).forEach((t,k)=>el('polygon',{points:t.p.map(q=>q.join(',')).join(' '),fill:t.sq?'#a3e635':COLS[t.c],stroke:'#1f2937','stroke-width':2,'stroke-linejoin':'round',opacity:pair&&!(t.i===0&&t.j===0)?.35:1},svg));
+  if(shape==='tri'||shape==='quad'){V[shape].forEach((p,i)=>{const h=el('circle',{cx:p[0],cy:p[1],r:11,fill:'#f97316',stroke:'#fff','stroke-width':3,style:'cursor:grab'},svg);h.addEventListener('pointerdown',e=>{drag=i;svg.setPointerCapture(e.pointerId);e.preventDefault();});});
+    el('polygon',{points:V[shape].map(q=>q.join(',')).join(' '),fill:'none',stroke:'#111827','stroke-width':4},svg);}
+  let s='';
+  if(shape==='tri'){const P=V.tri,a=P.map((_,i)=>Math.round(angleAt(P,i)));s=`Any triangle tessellates. Two copies (one turned a half turn) make a <b>parallelogram</b>, and parallelograms slide to fill the plane. Angles: ${a.join('° + ')}° = 180°. At every corner, 6 angles meet: 2 of each, making 360°.`;}
+  if(shape==='quad'){const P=V.quad,a=P.map((_,i)=>Math.round(angleAt(P,i)));s=`Any quadrilateral tessellates! Its angles ${a.join('° + ')}° add to 360°, and all four meet at each corner.`;}
+  if(shape==='sq')s='Squares tessellate: 4 right angles (4 × 90° = 360°) meet at every corner.';
+  if(shape==='hex')s='Regular hexagons tessellate: 3 angles of 120° meet at every corner (3 × 120° = 360°). Bees use this pattern!';
+  if(shape==='pent')s='Regular pentagons <b>do not</b> tessellate. Three angles of 108° make 324°, which leaves a <b>36° gap</b>, and a fourth pentagon would overlap.';
+  if(shape==='oct')s=addSq?'Octagons and squares together tessellate: 135° + 135° + 90° = 360° at each corner.':'Regular octagons alone <b>do not</b> tessellate: they leave square-shaped gaps (135° + 135° = 270°, so 90° is missing). Press "Add squares to fill the gaps".';
+  $('say').innerHTML=s;
+  if(shape==='pent'){const c=reg(5,90,[500,300],-Math.PI/2)[2];el('circle',{cx:c[0],cy:c[1],r:8,fill:'#dc2626'},svg);txt(svg,c[0]+14,c[1]+34,'gap!',20,'#dc2626','800','start');}
+}
+svg.addEventListener('pointermove',e=>{if(drag===null)return;const p=pt(svg,e);V[shape][drag]=[Math.max(250,Math.min(750,p.x)),Math.max(120,Math.min(440,p.y))];render();});
+svg.addEventListener('pointerup',()=>{drag=null;});
+$('count').oninput=render;
+$('pairBtn').onclick=e=>{pair=!pair;e.target.classList.toggle('on',pair);render();};
+$('colBtn').onclick=e=>{two=!two;e.target.classList.toggle('on',two);render();};
+$('sqBtn').onclick=e=>{addSq=!addSq;e.target.classList.toggle('on',addSq);render();};
+document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{shape=b.dataset.s;document.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('on',x===b));$('sqBtn').style.display=shape==='oct'?'':'none';$('pairBtn').style.display=shape==='tri'||shape==='quad'?'':'none';$('count').max=shape==='pent'?3:200;$('count').value=$('count').max;render();});
+render();
+</script></body></html>

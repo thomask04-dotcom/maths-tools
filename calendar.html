@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calendar</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#month{font-size:24px;font-weight:800;min-width:230px;text-align:center}
+#say{font-size:21px;padding:8px 14px;min-height:46px;line-height:1.5}
+#opts{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 8px}
+#opts button{font-size:18px;font-weight:700}
+#cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:10px;max-width:760px;margin:0 auto}
+.h{font-weight:800;text-align:center;padding:6px 0;border-radius:8px;background:#e0e7ff;font-size:clamp(12px,2vw,16px)}
+.h.we{background:#fce7f3}
+.d{aspect-ratio:1.25;border:2px solid #e2e8f0;border-radius:10px;display:flex;align-items:flex-start;justify-content:flex-end;padding:6px 8px;font-size:clamp(15px,2.6vw,22px);font-weight:700;cursor:pointer;background:#fff}
+.d.we{background:#fdf2f8}
+.d.today{border-color:#16a34a;border-width:4px}
+.d.sel{background:#2563eb;color:#fff}
+.d.rng{background:#bfdbfe}
+.d.empty{border:none;background:none;cursor:default}
+#days{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:6px 10px}
+#days span{padding:6px 12px;border-radius:999px;background:#e0e7ff;font-weight:700}
+#days span.we{background:#fce7f3}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Calendar</span>
+<button id="prev">◀</button><span id="month"></span><button id="next">▶</button><button id="todayBtn">Today</button>
+<button id="monBtn">Week starts Monday</button>
+</div>
+<div class="bar"><button id="look" class="on">👆 Look at a date</button><button id="count">↔ Count the days</button><button id="quiz">❓ Calendar questions</button></div>
+<div id="say"></div>
+<div id="opts"></div>
+<div id="cal"></div>
+<div id="days"></div>
+<div class="hint">Tap a date to see its day and date, plus yesterday and tomorrow. "Count the days": tap a start date and then an end date. Weekend days are pink.</div>
+<script>
+const $=id=>document.getElementById(id);
+const DN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const now=new Date();let Y=now.getFullYear(),M=now.getMonth(),mon=false,mode='look',sel=null,rng=[];
+const ord=n=>n+(n%10===1&&n%100!==11?'st':n%10===2&&n%100!==12?'nd':n%10===3&&n%100!==13?'rd':'th');
+const full=d=>`${DN[d.getDay()]} ${d.getDate()} ${MN[d.getMonth()]} ${d.getFullYear()}`;
+function say(s){$('say').innerHTML=s;}
+function render(){
+  $('month').textContent=MN[M]+' '+Y;const C=$('cal');C.innerHTML='';
+  const order=mon?[1,2,3,4,5,6,0]:[0,1,2,3,4,5,6];
+  order.forEach(d=>{const h=document.createElement('div');h.className='h'+(d%6===0?' we':'');h.textContent=DN[d].slice(0,3);C.appendChild(h);});
+  const first=new Date(Y,M,1),blank=(first.getDay()-order[0]+7)%7,days=new Date(Y,M+1,0).getDate();
+  for(let i=0;i<blank;i++){const e=document.createElement('div');e.className='d empty';C.appendChild(e);}
+  for(let n=1;n<=days;n++){const dt=new Date(Y,M,n),e=document.createElement('div');e.className='d'+(dt.getDay()%6===0?' we':'');e.textContent=n;
+    if(dt.toDateString()===now.toDateString())e.classList.add('today');
+    if(sel&&dt.getTime()===sel.getTime())e.classList.add('sel');
+    if(rng.length===2){const [a,b]=rng[0]<rng[1]?rng:[rng[1],rng[0]];if(dt>=a&&dt<=b)e.classList.add(dt.getTime()===a.getTime()||dt.getTime()===b.getTime()?'sel':'rng');}
+    else if(rng.length===1&&dt.getTime()===rng[0].getTime())e.classList.add('sel');
+    e.onclick=()=>tap(dt);C.appendChild(e);}
+  $('days').innerHTML=order.map(d=>`<span class="${d%6===0?'we':''}">${DN[d]}</span>`).join('');
+}
+function tap(dt){
+  if(mode==='look'){sel=dt;const y=new Date(dt);y.setDate(y.getDate()-1);const t=new Date(dt);t.setDate(t.getDate()+1);
+    say(`<b>${full(dt)}</b>. It's a ${dt.getDay()%6===0?'weekend day':'weekday'}.<br>Yesterday was ${DN[y.getDay()]} the ${ord(y.getDate())}. Tomorrow will be ${DN[t.getDay()]} the ${ord(t.getDate())}.`);render();}
+  if(mode==='count'){if(rng.length!==1)rng=[dt];else rng.push(dt);
+    if(rng.length===2){const [a,b]=rng[0]<rng[1]?rng:[rng[1],rng[0]],n=Math.round((b-a)/864e5),w=Math.floor(n/7),r=n%7;
+      say(`From ${full(a)} to ${full(b)} is <b>${n} day${n===1?'':'s'}</b>`+(n>=7?` = <b>${w} week${w>1?'s':''}${r?' and '+r+' day'+(r>1?'s':''):''}</b>`:'')+'.');}
+    else say(`Start: ${full(dt)}. Now tap the end date.`);render();}
+}
+function quiz(){
+  const days=new Date(Y,M+1,0).getDate(),k=Math.floor(Math.random()*4),O=$('opts');O.innerHTML='';sel=null;rng=[];render();
+  let q,ans,opts;
+  if(k===0){const n=1+Math.floor(Math.random()*days);q=`What day of the week is the <b>${ord(n)}</b> of ${MN[M]}?`;ans=DN[new Date(Y,M,n).getDay()];opts=DN.slice(1).concat(DN[0]);}
+  if(k===1){const d=Math.floor(Math.random()*7);let c=0;for(let n=1;n<=days;n++)if(new Date(Y,M,n).getDay()===d)c++;q=`How many <b>${DN[d]}s</b> are there in ${MN[M]}?`;ans=String(c);opts=['3','4','5','6'];}
+  if(k===2){const n=1+Math.floor(Math.random()*(days-7)),dt=new Date(Y,M,n+7);q=`What date is one week after ${DN[new Date(Y,M,n).getDay()]} the ${ord(n)}?`;ans=ord(dt.getDate());opts=[ord(n+6),ord(n+7),ord(n+8),ord(n+1)];}
+  if(k===3){q=`How many days are there in <b>${MN[M]}</b>?`;ans=String(days);opts=['28','29','30','31'];}
+  say(q);opts.forEach(o=>{const b=document.createElement('button');b.textContent=o;b.onclick=()=>{if(o===ans){say(`✓ Yes! ${ans}. `+'<button id="again">Next question</button>');$('again').onclick=quiz;O.innerHTML='';}else{b.disabled=true;b.style.opacity=.3;say(q+'<br>Not quite. Use the calendar to check.');}};O.appendChild(b);});
+}
+function setMode(m){mode=m;['look','count','quiz'].forEach(id=>$(id).classList.toggle('on',id===m));$('opts').innerHTML='';sel=null;rng=[];render();
+  if(m==='look')say('Tap any date.');if(m==='count')say('Tap a start date, then an end date.');if(m==='quiz')quiz();}
+$('look').onclick=()=>setMode('look');$('count').onclick=()=>setMode('count');$('quiz').onclick=()=>setMode('quiz');
+$('prev').onclick=()=>{M--;if(M<0){M=11;Y--;}render();if(mode==='quiz')quiz();};$('next').onclick=()=>{M++;if(M>11){M=0;Y++;}render();if(mode==='quiz')quiz();};
+$('todayBtn').onclick=()=>{Y=now.getFullYear();M=now.getMonth();setMode('look');tap(new Date(Y,M,now.getDate()));};
+$('monBtn').onclick=e=>{mon=!mon;e.target.classList.toggle('on',mon);render();};
+setMode('look');tap(new Date(Y,M,now.getDate()));
+</script></body></html>

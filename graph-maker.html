@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Graph Maker</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input,select{font:inherit;font-size:15px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.wrap{display:flex;flex-wrap:wrap;gap:12px;padding:10px;align-items:flex-start}
+#tableBox{flex:0 0 330px;max-width:100%}
+#tableBox table{border-collapse:collapse;width:100%}
+#tableBox td,#tableBox th{border:1px solid #e5e7eb;padding:3px;text-align:center;font-size:14px}
+#tableBox th{background:#f1f5f9}
+#tableBox input{width:100%;padding:4px 6px;border-radius:6px;font-size:14px}
+#tableBox input.v{width:64px;text-align:center}
+.pm{padding:2px 8px;font-weight:700}
+#graphBox{flex:1;min-width:320px}
+svg{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none;background:#fff}
+#warn{color:#b45309;font-weight:600;padding:4px 10px;min-height:24px}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Graph Maker</span>
+<select id="preset"><option value="fruit">Example: favourite fruit</option><option value="names">Example: letters in family names</option><option value="plant">Example: plant height over 10 days</option><option value="sport">Example: favourite sport (two groups)</option><option value="big">Example: cars past the school</option><option value="blank">Start blank</option></select>
+</div>
+<div class="bar">
+<span>Show as:</span>
+<button data-g="tally">Tally</button><button data-g="pict">Picture graph</button><button data-g="col" class="on">Column graph</button><button data-g="hbar">Horizontal bars</button><button data-g="dot">Dot plot</button><button data-g="line">Line graph</button><button data-g="side">Side-by-side columns</button>
+</div>
+<div class="bar">
+<label>Title <input id="ttl" style="width:220px"></label>
+<label>Scale: each step = <select id="scale"><option value="0">auto</option><option>1</option><option>2</option><option>5</option><option>10</option><option>20</option><option>50</option></select></label>
+<label>Picture key: 1 symbol = <select id="key"><option>1</option><option>2</option><option>5</option><option>10</option></select></label>
+<label>Axis starts at <input id="amin" type="number" value="0" style="width:70px"></label>
+</div>
+<div class="wrap">
+<div id="tableBox"></div>
+<div id="graphBox"><svg id="svg" viewBox="0 0 700 460"></svg><div id="warn"></div></div>
+</div>
+<div class="hint">Type your data into the table (use + and − to change the counts), then choose how to show it. Try the same data as a column graph and as a picture graph: what's easier to see? A scale of many-to-one (for example, each step = 5) helps with big numbers. Change "Axis starts at" to see how a graph can be misleading.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor,rot){const a={x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal'};if(rot)a.transform=`rotate(${rot} ${x} ${y})`;const t=el('text',a,p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),C1='#3b82f6',C2='#f97316';
+const PRE={
+ fruit:{t:'Our favourite fruit',x:'Fruit',y:'Number of students',s2:'',rows:[['Apple',7],['Banana',5],['Mango',9],['Grapes',4],['Orange',3]],g:'col'},
+ names:{t:'Letters in our family names',x:'Number of letters',y:'Number of students',s2:'',rows:[['3',1],['4',3],['5',6],['6',5],['7',4],['8',2],['9',1],['10',1]],g:'dot'},
+ plant:{t:'Height of our bean plant',x:'Day',y:'Height (cm)',s2:'',rows:[['1',0],['2',0],['3',1],['4',2],['5',4],['6',6],['7',8],['8',11],['9',13],['10',15]],g:'line'},
+ sport:{t:'Favourite sport',x:'Sport',y:'Number of students',s1:'Year 5',s2:'Year 6',rows:[['Soccer',12,9],['Netball',8,11],['Cricket',6,5],['Swimming',9,7]],g:'side'},
+ big:{t:'Cars that drove past in 10 minutes',x:'Colour',y:'Number of cars',s2:'',rows:[['White',38],['Black',26],['Silver',31],['Red',12],['Blue',17]],g:'col'},
+ blank:{t:'My graph',x:'Category',y:'Count',s2:'',rows:[['A',0],['B',0],['C',0]],g:'col'}};
+let D=null,g='col';
+function load(k){const p=PRE[k];D={t:p.t,x:p.x,y:p.y,s1:p.s1||'Group 1',s2:p.s2||'',rows:p.rows.map(r=>[r[0],r[1],r[2]||0])};g=p.g;$('ttl').value=D.t;$('amin').value=0;setG(g);table();}
+function table(){
+  const two=g==='side',T=$('tableBox');
+  let h=`<table><tr><th><input id="xl" value="${D.x}"></th><th>${two?`<input id="s1" value="${D.s1}">`:`<input id="yl" value="${D.y}">`}</th>${two?`<th><input id="s2" value="${D.s2||'Group 2'}"></th>`:''}<th></th></tr>`;
+  D.rows.forEach((r,i)=>{h+=`<tr><td><input data-r="${i}" data-c="0" value="${r[0]}"></td><td><button class="pm" data-m="${i},1,-1">−</button><input class="v" data-r="${i}" data-c="1" type="number" min="0" value="${r[1]}"><button class="pm" data-m="${i},1,1">+</button></td>${two?`<td><button class="pm" data-m="${i},2,-1">−</button><input class="v" data-r="${i}" data-c="2" type="number" min="0" value="${r[2]}"><button class="pm" data-m="${i},2,1">+</button></td>`:''}<td><button class="pm" data-del="${i}">✕</button></td></tr>`;});
+  h+=`</table><button id="addRow" style="margin-top:6px">+ Add a row</button>`;
+  if(two)h+=`<div style="margin-top:6px"><label>Axis label <input id="yl" value="${D.y}"></label></div>`;
+  T.innerHTML=h;
+  T.querySelectorAll('[data-r]').forEach(inp=>inp.addEventListener('input',()=>{const r=+inp.dataset.r,c=+inp.dataset.c;D.rows[r][c]=c?Math.max(0,+inp.value||0):inp.value;draw();}));
+  T.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{const [r,c,d]=b.dataset.m.split(',').map(Number);D.rows[r][c]=Math.max(0,D.rows[r][c]+d);table();draw();});
+  T.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(D.rows.length>1){D.rows.splice(+b.dataset.del,1);table();draw();}});
+  $('addRow').onclick=()=>{if(D.rows.length<12){D.rows.push(['New',0,0]);table();draw();}};
+  ['xl','yl','s1','s2'].forEach(id=>{if($(id))$(id).addEventListener('input',e=>{const k={xl:'x',yl:'y',s1:'s1',s2:'s2'}[id];D[k]=e.target.value;draw();});});
+  draw();
+}
+function niceStep(max){const s=+$('scale').value;if(s)return s;const raw=max/8;for(const c of [1,2,5,10,20,25,50,100,200,500])if(c>=raw)return c;return 1000;}
+function axes(L,T,W,H,minV,maxV,step,horiz){
+  const ticks=[];for(let v=minV;v<=maxV+1e-9;v+=step)ticks.push(v);
+  ticks.forEach(v=>{const f=(v-minV)/(maxV-minV);
+    if(!horiz){const y=T+H-f*H;el('line',{x1:L,x2:L+W,y1:y,y2:y,stroke:'#e5e7eb'},svg);el('line',{x1:L-6,x2:L,y1:y,y2:y,stroke:'#1f2937'},svg);txt(svg,L-10,y+5,String(v),13,'#334155','normal','end');}
+    else{const x=L+f*W;el('line',{x1:x,x2:x,y1:T,y2:T+H,stroke:'#e5e7eb'},svg);el('line',{x1:x,x2:x,y1:T+H,y2:T+H+6,stroke:'#1f2937'},svg);txt(svg,x,T+H+22,String(v),13,'#334155');}});
+  el('line',{x1:L,x2:L,y1:T,y2:T+H,stroke:'#1f2937','stroke-width':2},svg);el('line',{x1:L,x2:L+W,y1:T+H,y2:T+H,stroke:'#1f2937','stroke-width':2},svg);
+  if(minV>0){const y=T+H;el('path',{d:horiz?`M${L+4} ${y-6} l6 12 M${L+10} ${y-6} l6 12`:`M${L-6} ${y-10} l12 -6 M${L-6} ${y-16} l12 -6`,stroke:'#dc2626','stroke-width':2},svg);}
+}
+function draw(){
+  svg.innerHTML='';$('warn').textContent='';D.t=$('ttl').value;
+  txt(svg,350,30,D.t,20,'#111827','800');
+  const R=D.rows,n=R.length,vals=R.map(r=>r[1]),vals2=R.map(r=>r[2]);
+  const maxRaw=Math.max(1,...vals,...(g==='side'?vals2:[0]));
+  let minV=Math.max(0,+$('amin').value||0);
+  if(g==='tally'){
+    svg.setAttribute('viewBox',`0 0 700 ${90+n*52}`);
+    const X=[60,280,560];['Category','Tally','Total'].forEach((h,i)=>{el('rect',{x:[40,240,520][i],y:50,width:[200,280,140][i],height:40,fill:'#f1f5f9',stroke:'#94a3b8'},svg);txt(svg,[140,380,590][i],76,i===0?D.x:h,16,'#111827','700');});
+    R.forEach((r,i)=>{const y=90+i*52;[40,240,520].forEach((x,j)=>el('rect',{x,y,width:[200,280,140][j],height:52,fill:'#fff',stroke:'#94a3b8'},svg));txt(svg,140,y+32,r[0],17);
+      let x=252;const c=r[1];for(let k=0;k<Math.floor(c/5);k++){for(let j=0;j<4;j++)el('line',{x1:x+j*9,x2:x+j*9,y1:y+12,y2:y+40,stroke:'#1f2937','stroke-width':2.5},svg);el('line',{x1:x-4,x2:x+31,y1:y+36,y2:y+16,stroke:'#1f2937','stroke-width':2.5},svg);x+=50;if(x>480){break;}}
+      for(let j=0;j<c%5;j++)el('line',{x1:x+j*9,x2:x+j*9,y1:y+12,y2:y+40,stroke:'#1f2937','stroke-width':2.5},svg);
+      txt(svg,590,y+33,String(c),18,'#111827','700');});
+    return;
+  }
+  if(g==='pict'){
+    const k=+$('key').value,maxSym=Math.ceil(maxRaw/k),S=Math.min(40,480/Math.max(maxSym,1));
+    svg.setAttribute('viewBox',`0 0 700 ${110+n*(S+14)}`);
+    el('line',{x1:170,x2:170,y1:50,y2:60+n*(S+14),stroke:'#1f2937','stroke-width':2.5},svg);
+    R.forEach((r,i)=>{const y=60+i*(S+14);txt(svg,160,y+S/2+6,r[0],16,'#111827','600','end');
+      const full=Math.floor(r[1]/k),part=(r[1]%k)/k;
+      for(let j=0;j<full+(part?1:0);j++){const cx=180+j*(S+4)+S/2,cy=y+S/2,frac=j<full?1:part;
+        const cp='c'+i+'_'+j;const defs=el('defs',{},svg),clip=el('clipPath',{id:cp},defs);el('rect',{x:cx-S/2,y:cy-S/2,width:S*frac,height:S},clip);
+        const gg=el('g',{'clip-path':`url(#${cp})`},svg);el('circle',{cx,cy,r:S/2-2,fill:'#facc15',stroke:'#a16207','stroke-width':2},gg);el('circle',{cx:cx-S*0.15,cy:cy-S*0.1,r:S*0.06,fill:'#1f2937'},gg);el('circle',{cx:cx+S*0.15,cy:cy-S*0.1,r:S*0.06,fill:'#1f2937'},gg);el('path',{d:`M${cx-S*0.2} ${cy+S*0.1} Q${cx} ${cy+S*0.3} ${cx+S*0.2} ${cy+S*0.1}`,fill:'none',stroke:'#1f2937','stroke-width':2},gg);}});
+    const ky=80+n*(S+14);const kc=200;el('circle',{cx:kc,cy:ky,r:12,fill:'#facc15',stroke:'#a16207','stroke-width':2},svg);txt(svg,kc+20,ky+5,`Key: each face = ${k} ${k===1?'student':'students'}`+(R.some(r=>r[1]%k)?' (part of a face = part of a group)':''),14,'#334155','600','start');
+    txt(svg,90,50,D.x,14,'#64748b','700');
+    return;
+  }
+  svg.setAttribute('viewBox','0 0 700 460');
+  const L=80,T=60,W=580,H=300,horiz=g==='hbar';
+  if(g==='dot'){
+    const cols=n,cw=W/cols,maxC=Math.max(...vals,1),r=Math.min(cw*0.32,Math.min(14,(H-10)/(2*maxC)));
+    el('line',{x1:L,x2:L+W,y1:T+H,y2:T+H,stroke:'#1f2937','stroke-width':2},svg);
+    R.forEach((row,i)=>{const cx=L+i*cw+cw/2;el('line',{x1:cx,x2:cx,y1:T+H,y2:T+H+6,stroke:'#1f2937'},svg);txt(svg,cx,T+H+24,row[0],14);for(let j=0;j<row[1];j++)el('circle',{cx,cy:T+H-r-2-j*(2*r+2),r,fill:C1},svg);});
+    txt(svg,L+W/2,T+H+54,D.x,15,'#334155','700');return;
+  }
+  if(minV>=maxRaw)minV=0;
+  const step=niceStep(maxRaw-minV);let maxV=Math.ceil(maxRaw/step)*step;if(maxV<=minV)maxV=minV+step;
+  if(minV>0)$('warn').textContent='⚠ This axis does not start at 0, so the differences look bigger than they really are. Is this graph misleading?';
+  if(step>1&&!+$('scale').value)$('warn').textContent+=(minV>0?' ':'')+`Scale: each step on the axis stands for ${step}.`;
+  axes(L,T,W,H,minV,maxV,step,horiz);
+  const f=v=>Math.max(0,(v-minV)/(maxV-minV));
+  if(g==='col'||g==='hbar'||g==='side'){
+    const slot=(horiz?H:W)/n,bw=slot*(g==='side'?0.36:0.6);
+    R.forEach((r,i)=>{
+      const series=g==='side'?[[r[1],C1,-1],[r[2],C2,1]]:[[r[1],C1,0]];
+      series.forEach(([v,c,off])=>{
+        if(!horiz){const x=L+i*slot+slot/2-bw/2+off*bw/2+(g==='side'?off*2:0)-(g==='side'?0:0),h=f(v)*H;el('rect',{x:g==='side'?L+i*slot+slot/2+(off<0?-bw-2:2):x,y:T+H-h,width:bw,height:h,fill:c},svg);}
+        else{const y=T+i*slot+slot/2-bw/2,w=f(v)*W;el('rect',{x:L,y,width:w,height:bw,fill:c},svg);}
+      });
+      if(!horiz)txt(svg,L+i*slot+slot/2,T+H+22,r[0],14);else txt(svg,L-10,T+i*slot+slot/2+5,r[0],14,'#1f2937','normal','end');
+    });
+    if(g==='side'){[[D.s1,C1],[D.s2||'Group 2',C2]].forEach(([nm,c],j)=>{el('rect',{x:470+j*110,y:42,width:14,height:14,fill:c},svg);txt(svg,488+j*110,54,nm,13,'#334155','600','start');});}
+  }
+  if(g==='line'){
+    const slot=W/(n-1||1),pts=R.map((r,i)=>[L+i*slot,T+H-f(r[1])*H]);
+    el('polyline',{points:pts.map(p=>p.join(',')).join(' '),fill:'none',stroke:C1,'stroke-width':3},svg);
+    pts.forEach(([x,y],i)=>{el('circle',{cx:x,cy:y,r:5,fill:C1},svg);txt(svg,x,T+H+22,R[i][0],14);});
+  }
+  if(!horiz){txt(svg,L+W/2,T+H+50,D.x,15,'#334155','700');txt(svg,24,T+H/2,D.y,15,'#334155','700','middle',-90);}
+  else{txt(svg,L+W/2,T+H+50,D.y,15,'#334155','700');txt(svg,20,T+H/2,D.x,15,'#334155','700','middle',-90);}
+}
+function setG(v){g=v;document.querySelectorAll('[data-g]').forEach(x=>x.classList.toggle('on',x.dataset.g===g));}
+document.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{const was=g;setG(b.dataset.g);if((was==='side')!==(g==='side'))table();else draw();});
+$('preset').onchange=e=>load(e.target.value);
+['ttl','scale','key','amin'].forEach(id=>$(id).addEventListener(id==='ttl'||id==='amin'?'input':'change',draw));
+load('fruit');
+</script></body></html>

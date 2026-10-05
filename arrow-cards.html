@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arrow Cards & Number Expander</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input,select{font:inherit;font-size:15px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input{width:110px;text-align:center;font-size:18px;font-weight:700}
+#words{font-size:19px;padding:8px 14px;color:#1e3a8a;font-weight:600;min-height:40px}
+h3{margin:10px 14px 0;font-size:17px;color:#334155}
+#rename{font-size:22px;padding:6px 14px;line-height:1.8}
+#rename .p{display:inline-block;padding:2px 10px;border-radius:8px;font-weight:800}
+svg{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Arrow Cards & Number Expander</span>
+<label>Number <input id="num" value="2345"></label><button id="goBtn">Make it</button><button id="rndBtn">🎲 Random</button>
+<button id="stackBtn">⇆ Stack the cards</button>
+<button id="wordsBtn" class="on">Show in words</button>
+</div>
+<div id="words"></div>
+<svg id="cards" viewBox="0 0 1000 300"></svg>
+<h3>Number expander: rename the number</h3>
+<div class="bar"><span>Show it as:</span><span id="expBtns"></span></div>
+<svg id="exp" viewBox="0 0 1000 150"></svg>
+<h3>Trading: other ways to split it</h3>
+<div class="bar" id="tradeBtns"></div>
+<div id="rename"></div>
+<div class="hint">Stack the cards and the smaller cards cover the zeros, but the zeros are still there underneath: 34 is 30 + 4. Tap a card to lift it up and look. The expander shows the same number in hundreds, tens or ones. Trading keeps the total the same: 234 = 200 + 30 + 4 = 200 + 20 + 14.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const PL=['ones','tens','hundreds','thousands','ten thousands'],PL1=['one','ten','hundred','thousand','ten thousand'];
+const CC=['#fde047','#86efac','#93c5fd','#fca5a5','#d8b4fe'];
+let N=2345,stacked=false,t=0,anim=null,lifted=-1,expUnit=0,parts=[];
+const g3=n=>{const s=String(n);return s.length>4?s.replace(/\B(?=(\d{3})+(?!\d))/g,' '):s;};
+function words(n){
+  const ones=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'],tens=['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+  const u100=x=>x<20?ones[x]:tens[Math.floor(x/10)]+(x%10?'-'+ones[x%10]:'');
+  const u1000=x=>{const h=Math.floor(x/100),r=x%100;return (h?ones[h]+' hundred':'')+(h&&r?' and ':'')+(r||!h?u100(r):'');};
+  if(n===0)return 'zero';const th=Math.floor(n/1000),r=n%1000;
+  return (th?u1000(th)+' thousand':'')+(th&&r?(r<100?' and ':', '):'')+(r?u1000(r):'');
+}
+function digits(){return String(N).split('').map(Number).reverse();} // index = place
+function drawCards(){
+  const svg=$('cards');svg.innerHTML='';
+  const d=digits(),L=d.length,CW=58,CH=64,X0=500-(L*CW)/2;svg.setAttribute('viewBox',`0 0 1000 ${Math.max(260,24+L*(CH+6)+46)}`);
+  // card i has value d[i]*10^i, width (i+1) digits, sits at columns L-1-i .. L-1
+  for(let i=L-1;i>=0;i--){
+    if(!d[i]&&i!==0&&L>1)continue;
+    const w=(i+1)*CW,xS=X0+(L-1-i)*CW,yUn=24+(L-1-i)*(CH+6),yS=110,lift=lifted===i?-60:0;
+    const y=yUn+(yS-yUn)*t+lift*t;
+    const g=el('g',{style:'cursor:pointer'},svg);
+    el('path',{d:`M${xS} ${y} h${w} v${CH} h${-w} l-16 ${-CH/2} z`,fill:CC[i],stroke:'#1f2937','stroke-width':2.5},g);
+    const s=String(d[i]*10**i).padStart(i+1,'0');
+    [...s].forEach((ch,j)=>txt(g,xS+j*CW+CW/2,y+CH/2+14,ch,40,'#111827','800'));
+    g.addEventListener('pointerdown',()=>{lifted=lifted===i?-1:i;drawCards();});
+  }
+  if(t>0.99)txt(svg,500,230,'= '+g3(N),30,'#111827','800');
+  else txt(svg,500,24+L*(CH+6)+26,digits().map((v,i)=>v*10**i).reverse().filter((v,i,a)=>v||a.length===1).map(g3).join(' + ')+' = '+g3(N),22,'#334155','700');
+}
+function animate(to){cancelAnimationFrame(anim);const from=t,t0=performance.now();const step=now=>{const k=Math.min(1,(now-t0)/700);t=from+(to-from)*(k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2);drawCards();if(k<1)anim=requestAnimationFrame(step);};anim=requestAnimationFrame(step);}
+function expBtns(){
+  const L=digits().length,B=$('expBtns');B.innerHTML='';
+  for(let u=0;u<L;u++){const b=document.createElement('button');b.textContent=u===0?'Standard ('+PL.slice(0,L).reverse().join(', ')+')':PL[u]+' and ones';if(u===expUnit)b.classList.add('on');b.onclick=()=>{expUnit=u;expBtns();drawExp();};B.appendChild(b);}
+  if(expUnit>=L)expUnit=0;
+}
+function drawExp(){
+  const svg=$('exp');svg.innerHTML='';
+  let blocks=[];
+  if(expUnit===0){const d=digits();for(let i=d.length-1;i>=0;i--)blocks.push({v:String(d[i]),w:PL[i],c:CC[i]});}
+  else{const big=Math.floor(N/10**expUnit),rest=N%10**expUnit;blocks.push({v:g3(big),w:PL[expUnit],c:CC[expUnit]});blocks.push({v:g3(rest),w:'ones',c:CC[0]});}
+  const widths=blocks.map(b=>Math.max(80,b.v.length*30+20)+Math.max(130,b.w.length*12+28)),tot=widths.reduce((a,b)=>a+b,0)+(blocks.length-1)*14;
+  const VW=Math.max(1000,tot+40);svg.setAttribute('viewBox',`0 0 ${VW} 150`);let x=VW/2-tot/2;
+  blocks.forEach((b,i)=>{const dw=Math.max(80,b.v.length*30+20),ww=widths[i]-dw;
+    el('rect',{x,y:30,width:dw,height:76,rx:8,fill:'#fff',stroke:'#1f2937','stroke-width':2.5},svg);txt(svg,x+dw/2,82,b.v,40,'#111827','800');
+    el('rect',{x:x+dw,y:30,width:ww,height:76,rx:8,fill:b.c,stroke:'#1f2937','stroke-width':2.5},svg);txt(svg,x+dw+ww/2,75,b.w,18,'#111827','700');
+    x+=widths[i]+14;});
+}
+function resetParts(){parts=digits().map((v,i)=>v*10**i);}
+function drawRename(){
+  const L=digits().length,T=$('tradeBtns');T.innerHTML='<span>Trade:</span>';
+  for(let i=L-1;i>=1;i--){const b=document.createElement('button');b.textContent=`1 ${PL1[i]} → 10 ${PL[i-1]}`;b.disabled=parts[i]<10**i;b.onclick=()=>{parts[i]-=10**i;parts[i-1]+=10**i;drawRename();};T.appendChild(b);}
+  const r=document.createElement('button');r.textContent='↺ Back to standard';r.onclick=()=>{resetParts();drawRename();};T.appendChild(r);
+  const sum=parts.reduce((a,b)=>a+b,0);
+  const items=[];for(let i=L-1;i>=0;i--)items.push(`<span class="p" style="background:${CC[i]}">${g3(parts[i])}</span>`);
+  $('rename').innerHTML=`${g3(N)} = ${items.join(' + ')} &nbsp; <span style="color:${sum===N?'#15803d':'#b91c1c'}">(still ${g3(sum)}${sum===N?' ✓':''})</span><br><span style="font-size:17px;color:#475569">${[...Array(L).keys()].reverse().map(i=>`${g3(parts[i]/10**i)} ${parts[i]/10**i===1?PL1[i]:PL[i]}`).join(', ')}</span>`;
+}
+function make(v){const n=Math.round(+String(v).replace(/[\s,]/g,''));if(isNaN(n)||n<1||n>99999){$('words').textContent='Type a whole number from 1 to 99 999.';return;}N=n;$('num').value=g3(n);lifted=-1;expUnit=0;resetParts();update();}
+function update(){$('words').textContent=$('wordsBtn').classList.contains('on')?words(N):'';drawCards();expBtns();drawExp();drawRename();}
+$('goBtn').onclick=()=>make($('num').value);
+$('num').addEventListener('keydown',e=>{if(e.key==='Enter')make($('num').value);});
+$('rndBtn').onclick=()=>{const L=2+Math.floor(Math.random()*4);let s='';for(let i=0;i<L;i++)s+=i===0?1+Math.floor(Math.random()*9):(Math.random()<.2?0:Math.floor(Math.random()*10));make(s);};
+$('stackBtn').onclick=e=>{stacked=!stacked;e.target.classList.toggle('on',stacked);e.target.textContent=stacked?'⇆ Pull the cards apart':'⇆ Stack the cards';lifted=-1;animate(stacked?1:0);};
+$('wordsBtn').onclick=e=>{e.target.classList.toggle('on');update();};
+make(2345);
+</script></body></html>

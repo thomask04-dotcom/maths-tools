@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shape Sorter</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:16px;padding:8px 14px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#say{font-size:22px;padding:8px 14px;min-height:46px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Shape Sorter</span>
+<span>Sort by:</span><button data-m="name" class="on">Shape name</button><button data-m="sides">Number of sides</button><button data-m="corners">Straight or curved</button>
+<button id="newBtn">🔀 New shapes</button>
+<button id="checkBtn">✓ Check</button>
+</div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 620"></svg>
+<div class="hint">Drag each shape into the right box, then press Check. Shapes can be turned or stretched and still be the same kind of shape.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),TRAY=250;
+const COLS=['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899'];
+const BINS={
+ name:[['Circles','circle'],['Triangles','triangle'],['Squares','square'],['Rectangles','rectangle'],['Other','other']],
+ sides:[['3 sides',3],['4 sides',4],['5 sides',5],['6 sides',6],['Has curved sides',0]],
+ corners:[['Only straight sides','straight'],['Curved sides','curved']]};
+let mode='name',shapes=[],drag=null,marks=null;
+function reg(n,r,rot){return Array.from({length:n},(_,i)=>{const a=rot+i*2*Math.PI/n;return [r*Math.cos(a),r*Math.sin(a)];});}
+function rotPts(p,a){const c=Math.cos(a),s=Math.sin(a);return p.map(([x,y])=>[x*c-y*s,x*s+y*c]);}
+function makeShape(kind){
+  const r=26+Math.random()*16,a=Math.random()*Math.PI*2;let pts=null,sides=0,name='other',curved=false,ell=null;
+  if(kind==='circle'){ell=[r,r];name='circle';curved=true;}
+  else if(kind==='oval'){ell=[r*1.3,r*0.75];curved=true;}
+  else if(kind==='semi'){curved=true;}
+  else if(kind==='tri'){const w=r*(1.2+Math.random()*.8),h=r*(1+Math.random()),o=(Math.random()-.5)*w*1.4;pts=rotPts([[-w,h/1.5],[w,h/1.5],[o,-h]],a);sides=3;name='triangle';}
+  else if(kind==='sq'){pts=rotPts([[-r,-r],[r,-r],[r,r],[-r,r]].map(p=>p.map(v=>v*0.8)),Math.random()<.5?0:Math.PI/4);sides=4;name='square';}
+  else if(kind==='rect'){const w=r*(1.3+Math.random()*.5),h=r*(0.5+Math.random()*.3);pts=rotPts([[-w,-h],[w,-h],[w,h],[-w,h]],Math.random()<.6?0:Math.PI/2*Math.random());sides=4;name='rectangle';}
+  else if(kind==='rhom'){pts=rotPts([[0,-r*1.1],[r*0.7,0],[0,r*1.1],[-r*0.7,0]],a*0.3);sides=4;}
+  else if(kind==='pent'){pts=reg(5,r,a);sides=5;}
+  else if(kind==='hex'){pts=reg(6,r,a);sides=6;}
+  return {kind,pts,ell,sides,name,curved,rot:a,r,c:COLS[Math.floor(Math.random()*COLS.length)],bin:null};
+}
+function newSet(){
+  const kinds=['circle','circle','tri','tri','tri','sq','sq','rect','rect','oval','semi','rhom','pent','hex'];
+  shapes=kinds.sort(()=>Math.random()-.5).map(makeShape);
+  shapes.forEach((s,i)=>{s.x=70+(i%7)*140;s.y=i<7?70:180;});marks=null;$('say').textContent='Drag the shapes into the boxes.';render();
+}
+function drawShape(p,s,ok){
+  const st={fill:s.c,stroke:ok===false?'#dc2626':'#1f2937','stroke-width':ok===false?5:2.5};
+  let e;
+  if(s.ell)e=el('ellipse',{cx:s.x,cy:s.y,rx:s.ell[0],ry:s.ell[1],transform:`rotate(${s.rot*57.3} ${s.x} ${s.y})`,...st},p);
+  else if(s.kind==='semi'){const r=s.r,c=Math.cos(s.rot),si=Math.sin(s.rot),p1=[s.x-r*c,s.y-r*si],p2=[s.x+r*c,s.y+r*si];e=el('path',{d:`M${p1[0]} ${p1[1]} A${r} ${r} 0 0 1 ${p2[0]} ${p2[1]} Z`,...st},p);}
+  else e=el('polygon',{points:s.pts.map(([x,y])=>`${s.x+x},${s.y+y}`).join(' '),...st},p);
+  e.style.cursor='grab';return e;
+}
+function binRects(){const B=BINS[mode],w=(1000-20)/B.length;return B.map((b,i)=>({x:10+i*w,y:TRAY+10,w:w-10,h:600-TRAY-10,label:b[0],key:b[1]}));}
+function correctKey(s){if(mode==='name')return s.name;if(mode==='sides')return s.curved?0:s.sides;return s.curved?'curved':'straight';}
+function render(){
+  svg.innerHTML='';
+  el('rect',{x:0,y:0,width:1000,height:TRAY,fill:'#f1f5f9'},svg);
+  binRects().forEach(b=>{el('rect',{x:b.x,y:b.y,width:b.w,height:b.h,rx:16,fill:'#fff',stroke:'#64748b','stroke-width':3,'stroke-dasharray':'10 6'},svg);txt(svg,b.x+b.w/2,b.y+34,b.label,20,'#334155','700');});
+  shapes.forEach((s,i)=>{const e=drawShape(svg,s,marks?marks[i]:null);e.addEventListener('pointerdown',ev=>{drag={s,dx:pt(svg,ev).x-s.x,dy:pt(svg,ev).y-s.y};shapes=shapes.filter(q=>q!==s);shapes.push(s);if(marks)marks=null;svg.setPointerCapture(ev.pointerId);ev.preventDefault();render();});});
+}
+svg.addEventListener('pointermove',e=>{if(!drag)return;const p=pt(svg,e);drag.s.x=Math.max(20,Math.min(980,p.x-drag.dx));drag.s.y=Math.max(20,Math.min(600,p.y-drag.dy));render();});
+svg.addEventListener('pointerup',()=>{if(!drag)return;const s=drag.s;s.bin=null;for(const b of binRects())if(s.x>b.x&&s.x<b.x+b.w&&s.y>b.y&&s.y<b.y+b.h)s.bin=b.key;drag=null;render();});
+$('checkBtn').onclick=()=>{
+  const left=shapes.filter(s=>s.bin===null).length;
+  marks=shapes.map(s=>s.bin===null?null:s.bin===correctKey(s)||(mode==='name'&&s.name==='square'&&s.bin==='rectangle'));
+  const wrong=marks.filter(m=>m===false).length;
+  $('say').innerHTML=wrong?`${wrong} shape${wrong>1?'s are':' is'} in the wrong box (outlined in red). Move ${wrong>1?'them':'it'} and check again.`:left?`✓ All correct so far. ${left} shape${left>1?'s':''} still to sort.`:'🎉 Brilliant sorting! Every shape is in the right box.'+(mode==='name'&&shapes.some(q=>q.name==='square'&&q.bin==='rectangle')?' (Yes, a square is a special rectangle!)':'');
+  render();
+};
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));shapes.forEach((s,i)=>{s.bin=null;s.x=70+(i%7)*140;s.y=i<7?70:180;});marks=null;render();});
+$('newBtn').onclick=newSet;
+newSet();
+</script></body></html>

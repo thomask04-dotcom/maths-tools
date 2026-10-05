@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Number Line</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:14px}
+.title{font-weight:700;margin-right:6px;font-size:16px}
+button,select,input{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input{width:64px}
+label{display:flex;align-items:center;gap:4px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Number Line</span>
+<label>From <input id="start" type="number" value="0"></label>
+<label>to <input id="end" type="number" value="2"></label>
+<label>Parts in each whole <select id="parts">
+<option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>8</option><option>10</option><option>12</option><option>100</option></select></label>
+<label>Labels <select id="lab"><option>Fractions</option><option>Mixed numerals</option><option>Decimals</option><option>Whole numbers only</option><option>No labels</option></select></label>
+</div>
+<div class="bar">
+<button id="markTool" class="on">📍 Markers</button>
+<button id="jumpTool">↷ Jumps</button>
+<button id="valBtn" class="on">Show marker values</button>
+<button id="clearBtn">Clear</button>
+<button id="rndBtn">🎯 Rounding mode</button>
+<span id="rndCtl" style="display:none;gap:6px;align-items:center">Number <input id="rN" type="number" value="47" style="width:90px"> to the nearest <select id="rTo"><option value="10">10</option><option value="100">100</option><option value="1000">1000</option></select> <button id="rGo">Show</button> <button id="rRand">🎲</button></span>
+</div>
+<svg id="svg" viewBox="0 0 1000 320"></svg>
+<div class="hint">Markers: tap the line to add a marker, drag it to move, drag it far off the line to remove. Jumps: drag along the line from one point to another.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','pointer-events':'none'},p);t.textContent=s;return t;}
+function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b){[a,b]=[b,a%b];}return a;}
+function frac(p,x,yMid,f,fs,fill){
+  fill=fill||'#1f2937';
+  if(f.t!==undefined){txt(p,x,yMid+fs*0.35,f.t,fs,fill);return;}
+  const lead=(f.sign||'')+(f.w?String(f.w):'');
+  if(!f.n){txt(p,x,yMid+fs*0.35,lead||'0',fs,fill);return;}
+  const cw=fs*0.6,fw=cw*Math.max(String(f.n).length,String(f.d).length)+4,lw=lead?cw*lead.length+3:0,x0=x-(lw+fw)/2;
+  if(lead)txt(p,x0,yMid+fs*0.35,lead,fs,fill,'start');
+  const cx=x0+lw+fw/2;
+  txt(p,cx,yMid-fs*0.2,f.n,fs*0.85,fill);
+  el('line',{x1:cx-fw/2,x2:cx+fw/2,y1:yMid,y2:yMid,stroke:fill,'stroke-width':1.4,'pointer-events':'none'},p);
+  txt(p,cx,yMid+fs*0.85,f.d,fs*0.85,fill);
+}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+
+const $=id=>document.getElementById(id);
+const svg=document.getElementById('svg');
+const L=60,R=940,LY=170;
+const MCOL=['#dc2626','#2563eb','#16a34a','#9333ea','#ea580c','#0891b2'];
+let start=0,end=2,parts=4,lab=0,showVals=true,tool='marker',markers=[],jumps=[],drag=null,tmp=null;
+function N(){return (end-start)*parts;}
+function X(i){return L+i*(R-L)/N();}
+function nearest(x){return Math.max(0,Math.min(N(),Math.round((x-L)/(R-L)*N())));}
+// num/den -> label object. m: 0 fraction, 1 mixed, 2 decimal
+function fmt(num,den,m,plus){
+  const sign=num<0?'−':(plus&&num>0?'+':''),a=Math.abs(num);
+  if(m===2){const ex=(a*1000)%den===0,v=a/den;return {t:(ex?'':'≈')+sign+(ex?String(parseFloat(v.toFixed(3))):v.toFixed(2))};}
+  if(a%den===0)return {t:sign+(a/den)};
+  if(m===0){const g=gcd(a,den);return {sign,n:a/g,d:den/g};}
+  const w=Math.floor(a/den),r=a%den,g=gcd(r,den);return {sign,w,n:r/g,d:den/g};
+}
+let rounding=false;
+function renderRound(){
+  svg.innerHTML='';svg.setAttribute('viewBox','0 0 1000 320');
+  const N=Math.round(+$('rN').value||0),to=+$('rTo').value,lo=Math.floor(N/to)*to,hi=lo+to,X=v=>80+(v-lo)/to*840,LY=170,mid=lo+to/2;
+  el('rect',{x:0,y:0,width:1000,height:320,fill:'#fff'},svg);
+  el('line',{x1:60,x2:940,y1:LY,y2:LY,stroke:'#1f2937','stroke-width':3},svg);
+  for(let i=0;i<=10;i++){const v=lo+i*to/10,x=X(v);el('line',{x1:x,x2:x,y1:LY-(i%5?9:18),y2:LY+(i%5?9:18),stroke:'#1f2937','stroke-width':i%10?1.5:3},svg);if(i%5===0)txt(svg,x,LY+44,String(v),i===5?16:22,i===5?'#64748b':'#111827');}
+  el('line',{x1:X(mid),x2:X(mid),y1:LY-60,y2:LY+20,stroke:'#94a3b8','stroke-width':2,'stroke-dasharray':'6 5'},svg);txt(svg,X(mid),LY-66,'halfway',13,'#64748b');
+  const near=N-lo<hi-N?lo:hi;
+  el('circle',{cx:X(N),cy:LY,r:11,fill:'#dc2626'},svg);txt(svg,X(N),LY-26,String(N),22,'#dc2626');
+  el('path',{d:`M${X(N)} ${LY+60} Q${(X(N)+X(near))/2} ${LY+100} ${X(near)} ${LY+60}`,fill:'none',stroke:'#16a34a','stroke-width':3},svg);
+  el('circle',{cx:X(near),cy:LY+56,r:6,fill:'#16a34a'},svg);
+  $('clearBtn');const msg=N===mid?`${N} is exactly halfway between ${lo} and ${hi}. We usually round halfway numbers up, to <b>${hi}</b>.`:`${N} is between ${lo} and ${hi}. It is closer to <b>${near}</b>, so ${N} rounded to the nearest ${to} is <b>${near}</b>.`;
+  let m=document.getElementById('rMsg');if(!m){m=document.createElement('div');m.id='rMsg';m.style.cssText='font-size:20px;padding:8px 14px';svg.after(m);}m.innerHTML=msg;
+}
+function render(){
+  if(rounding){renderRound();return;}const rm=document.getElementById('rMsg');if(rm)rm.remove();
+  svg.innerHTML='';
+  const bg=el('rect',{x:0,y:0,width:1000,height:320,fill:'#fff'},svg);
+  bg.addEventListener('pointerdown',down);
+  const n=N();
+  el('line',{x1:L-25,x2:R+25,y1:LY,y2:LY,stroke:'#1f2937','stroke-width':2.5,'pointer-events':'none'},svg);
+  el('polygon',{points:`${L-35},${LY} ${L-22},${LY-7} ${L-22},${LY+7}`,fill:'#1f2937','pointer-events':'none'},svg);
+  el('polygon',{points:`${R+35},${LY} ${R+22},${LY-7} ${R+22},${LY+7}`,fill:'#1f2937','pointer-events':'none'},svg);
+  let step=parts===100?10:1;if(n/step>30)step=parts;
+  const fs=n/step>18?13:16;
+  for(let i=0;i<=n;i++){
+    const num=start*parts+i,whole=num%parts===0,x=X(i);
+    const th=whole?16:(parts===100&&num%10===0?11:8);
+    el('line',{x1:x,x2:x,y1:LY-th,y2:LY+th,stroke:'#1f2937','stroke-width':whole?2.2:1.2,'pointer-events':'none'},svg);
+    if(lab!==4&&(whole||(lab!==3&&i%step===0)))frac(svg,x,LY+42,fmt(num,parts,lab===3?0:lab),whole?fs+2:fs,whole?'#111827':'#374151');
+  }
+  const jl=lab===1?1:lab===2?2:0;
+  for(const j of [...jumps,...(tmp&&tmp.a!==tmp.b?[tmp]:[])])drawJump(j,jl);
+  markers.forEach((m,k)=>{
+    const x=X(m),c=MCOL[k%MCOL.length];
+    if(showVals){
+      el('line',{x1:x,x2:x,y1:LY+12,y2:LY+78,stroke:c,'stroke-width':1.5,'stroke-dasharray':'3 3','pointer-events':'none'},svg);
+      el('rect',{x:x-34,y:LY+78,width:68,height:44,rx:8,fill:'#fff',stroke:c,'stroke-width':2,'pointer-events':'none'},svg);
+      frac(svg,x,LY+100,fmt(start*parts+m,parts,jl),17,c);
+    }
+    const h=el('circle',{cx:x,cy:LY,r:11,fill:c,stroke:'#fff','stroke-width':2.5,style:'cursor:grab'},svg);
+    h.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();drag={k,far:false};svg.setPointerCapture(e.pointerId);});
+  });
+}
+function drawJump(j,jl){
+  const xa=X(j.a),xb=X(j.b),h=Math.min(95,22+Math.abs(xb-xa)*0.35),mx=(xa+xb)/2,y0=LY-6,cy=y0-2*h;
+  el('path',{d:`M${xa} ${y0} Q${mx} ${cy} ${xb} ${y0}`,fill:'none',stroke:'#7c3aed','stroke-width':2.5,'pointer-events':'none'},svg);
+  const ang=Math.atan2(y0-cy,xb-mx),s=10;
+  el('polygon',{points:`${xb},${y0} ${xb-s*Math.cos(ang-0.4)},${y0-s*Math.sin(ang-0.4)} ${xb-s*Math.cos(ang+0.4)},${y0-s*Math.sin(ang+0.4)}`,fill:'#7c3aed','pointer-events':'none'},svg);
+  if(lab!==4)frac(svg,mx,y0-h-20,fmt(j.b-j.a,parts,jl,true),16,'#7c3aed');
+}
+function down(e){
+  const p=pt(svg,e),i=nearest(p.x);e.preventDefault();svg.setPointerCapture(e.pointerId);
+  if(tool==='marker'){markers.push(i);drag={k:markers.length-1,far:false};}
+  else tmp={a:i,b:i};
+  render();
+}
+svg.addEventListener('pointermove',e=>{
+  if(!drag&&!tmp)return;const p=pt(svg,e);
+  if(drag){markers[drag.k]=nearest(p.x);drag.far=Math.abs(p.y-LY)>120;}
+  else tmp.b=nearest(p.x);
+  render();
+});
+svg.addEventListener('pointerup',()=>{
+  if(drag&&drag.far)markers.splice(drag.k,1);
+  if(tmp&&tmp.a!==tmp.b)jumps.push({a:tmp.a,b:tmp.b});
+  drag=null;tmp=null;render();
+});
+function readSettings(){
+  const sI=document.getElementById('start'),eI=document.getElementById('end');
+  start=Math.round(+sI.value||0);end=Math.round(+eI.value||0);parts=+document.getElementById('parts').value;
+  if(end<=start)end=start+1;
+  const maxRange=Math.max(1,Math.min(20,Math.floor(240/parts)));
+  if(end-start>maxRange)end=start+maxRange;
+  sI.value=start;eI.value=end;markers=[];jumps=[];render();
+}
+['start','end','parts'].forEach(id=>document.getElementById(id).addEventListener('change',readSettings));
+document.getElementById('lab').addEventListener('change',e=>{lab=e.target.selectedIndex;render();});
+const mT=document.getElementById('markTool'),jT=document.getElementById('jumpTool');
+mT.onclick=()=>{tool='marker';mT.classList.add('on');jT.classList.remove('on');};
+jT.onclick=()=>{tool='jump';jT.classList.add('on');mT.classList.remove('on');};
+document.getElementById('valBtn').onclick=e=>{showVals=!showVals;e.target.classList.toggle('on',showVals);render();};
+document.getElementById('clearBtn').onclick=()=>{markers=[];jumps=[];render();};
+$('rndBtn').onclick=e=>{rounding=!rounding;e.target.classList.toggle('on',rounding);$('rndCtl').style.display=rounding?'flex':'none';render();};
+$('rGo').onclick=()=>render();$('rN').addEventListener('keydown',e=>{if(e.key==='Enter')render();});$('rTo').onchange=()=>render();
+$('rRand').onclick=()=>{const to=+$('rTo').value;$('rN').value=Math.floor(Math.random()*to*10);render();};
+render();
+</script></body></html>

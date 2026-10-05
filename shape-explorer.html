@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Triangle & Quadrilateral Explorer</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,select{font:inherit;font-size:15px;padding:6px 11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.wrap{display:flex;flex-wrap:wrap;gap:12px;padding:8px}
+#main{flex:1;min-width:320px}
+#info{flex:0 0 280px;font-size:16px;line-height:1.6}
+#info .big{font-size:22px;font-weight:800;color:#1e3a8a;line-height:1.25;margin-bottom:6px}
+#info .muted{color:#64748b;font-size:14px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Triangle & Quadrilateral Explorer</span>
+<button data-k="3" class="on">Triangle</button><button data-k="4">Quadrilateral</button>
+<select id="preset"></select>
+</div>
+<div class="bar">
+<button id="lenBtn" class="on">Side lengths</button><button id="angBtn" class="on">Angles</button><button id="symBtn">Lines of symmetry</button><button id="diaBtn">Diagonals</button><button id="snapBtn" class="on">Snap to grid</button>
+</div>
+<div class="wrap"><div id="main"><svg id="svg" viewBox="0 0 760 520"></svg></div><div id="info"></div></div>
+<div class="hint">Drag the corners to change the shape. Tick marks show equal sides, a small square shows a right angle, and arrows show parallel sides. Watch how the name changes. Can you make an isosceles triangle with a right angle?</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),G=40,GW=19,GH=13,X0=0,Y0=0;
+const r3=Math.sqrt(3);
+const PRE={3:{'Scalene':[[3,10],[13,10],[6,3]],'Isosceles':[[4,10],[12,10],[8,4]],'Equilateral (no grid snap)':[[4,10],[12,10],[8,10-4*r3]],'Right-angled':[[4,10],[12,10],[4,4]],'Right-angled isosceles':[[4,10],[11,10],[4,3]],'Obtuse':[[3,10],[14,10],[5,7]]},
+ 4:{'Square':[[5,9],[11,9],[11,3],[5,3]],'Rectangle':[[3,9],[14,9],[14,4],[3,4]],'Rhombus':[[8,11],[11,7],[8,3],[5,7]],'Parallelogram':[[3,9],[12,9],[15,4],[6,4]],'Kite':[[9,11],[12,6],[9,2],[6,6]],'Trapezium':[[3,9],[15,9],[11,4],[6,4]],'Irregular':[[3,10],[13,9],[11,3],[5,5]]}};
+let k=3,P=PRE[3]['Scalene'].map(p=>p.slice()),drag=null,show={len:true,ang:true,sym:false,dia:false},snap=true;
+const S=p=>[X0+p[0]*G,Y0+p[1]*G];
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1]],len=v=>Math.hypot(v[0],v[1]),dot=(a,b)=>a[0]*b[0]+a[1]*b[1],cross=(a,b)=>a[0]*b[1]-a[1]*b[0];
+function angles(){return P.map((p,i)=>{const a=sub(P[(i+k-1)%k],p),b=sub(P[(i+1)%k],p);return Math.acos(Math.max(-1,Math.min(1,dot(a,b)/(len(a)*len(b)))))*180/Math.PI;});}
+function sides(){return P.map((p,i)=>len(sub(P[(i+1)%k],p)));}
+const eq=(a,b)=>Math.abs(a-b)<Math.max(a,b)*0.003+1e-9,rt=a=>Math.abs(a-90)<0.6;
+function convex(){let sg=0;for(let i=0;i<k;i++){const c=cross(sub(P[(i+1)%k],P[i]),sub(P[(i+2)%k],P[(i+1)%k]));if(Math.abs(c)<1e-9)continue;if(!sg)sg=Math.sign(c);else if(Math.sign(c)!==sg)return false;}return true;}
+function simple(){if(k===3)return Math.abs(cross(sub(P[1],P[0]),sub(P[2],P[0])))>1e-6;const segX=(a,b,c,d)=>{const d1=cross(sub(b,a),sub(c,a)),d2=cross(sub(b,a),sub(d,a)),d3=cross(sub(d,c),sub(a,c)),d4=cross(sub(d,c),sub(b,c));return d1*d2<0&&d3*d4<0;};return !segX(P[0],P[1],P[2],P[3])&&!segX(P[1],P[2],P[3],P[0]);}
+function parallel(i,j){const a=sub(P[(i+1)%k],P[i]),b=sub(P[(j+1)%k],P[j]);return Math.abs(cross(a,b))<1e-6*len(a)*len(b)+1e-9;}
+function symLines(){
+  const c=P.reduce((a,b)=>[a[0]+b[0]/k,a[1]+b[1]/k],[0,0]),cands=[];
+  P.forEach((p,i)=>{cands.push(sub(p,c));const m=[(p[0]+P[(i+1)%k][0])/2,(p[1]+P[(i+1)%k][1])/2];cands.push(sub(m,c));});
+  const out=[];
+  for(const d of cands){if(len(d)<1e-9)continue;const u=[d[0]/len(d),d[1]/len(d)];
+    const refl=p=>{const v=sub(p,c),t=dot(v,u);return [c[0]+2*t*u[0]-v[0],c[1]+2*t*u[1]-v[1]];};
+    const ok=P.every(p=>{const r=refl(p);return P.some(q=>len(sub(q,r))<1e-3);});
+    if(ok&&!out.some(v=>Math.abs(cross(v,u))<1e-3))out.push(u);}
+  return {c,lines:out};
+}
+function classify(){
+  const s=sides(),a=angles(),out={name:'',also:[]};
+  if(!simple())return {name:k===3?'Not a triangle (the corners are in a line)':'The sides cross over, so this is not a simple quadrilateral',also:[]};
+  if(k===3){const e=[eq(s[0],s[1]),eq(s[1],s[2]),eq(s[0],s[2])].filter(Boolean).length;const sn=e===3?'equilateral':e>=1?'isosceles':'scalene';const an=a.some(rt)?'right-angled':a.some(x=>x>90.6)?'obtuse-angled':'acute-angled';out.name=`${cap(an)} ${sn} triangle`;if(sn==='equilateral')out.also=['An equilateral triangle is also isosceles.'];return out;}
+  if(!convex()){out.name='Quadrilateral (concave)';out.also=['One angle is more than 180° on the inside (a reflex angle).'];if(eq(s[0],s[1])&&eq(s[2],s[3])||eq(s[1],s[2])&&eq(s[3],s[0]))out.name='Concave kite (arrowhead / chevron)';return out;}
+  const p1=parallel(0,2),p2=parallel(1,3),allEq=s.every(x=>eq(x,s[0])),allR=a.every(rt);
+  if(allEq&&allR){out.name='Square';out.also=['A square is also a rectangle, a rhombus, a parallelogram and a kite.'];}
+  else if(allR){out.name='Rectangle';out.also=['A rectangle is also a parallelogram.'];}
+  else if(allEq){out.name='Rhombus';out.also=['A rhombus is also a parallelogram and a kite.'];}
+  else if(p1&&p2){out.name='Parallelogram';}
+  else if(eq(s[0],s[1])&&eq(s[2],s[3])||eq(s[1],s[2])&&eq(s[3],s[0])){out.name='Kite';}
+  else if(p1||p2){out.name='Trapezium';const legs=p1?[s[1],s[3]]:[s[0],s[2]];if(eq(legs[0],legs[1]))out.also=['This is an isosceles trapezium: the two sides that aren\'t parallel are equal.'];}
+  else out.name='Quadrilateral (irregular)';
+  return out;
+}
+const cap=s=>s[0].toUpperCase()+s.slice(1);
+function render(){
+  svg.innerHTML='';
+  for(let x=0;x<=GW;x++)for(let y=0;y<=GH;y++)el('circle',{cx:x*G,cy:y*G,r:2,fill:'#cbd5e1'},svg);
+  const pts=P.map(S),s=sides(),a=angles();
+  el('polygon',{points:pts.map(p=>p.join(',')).join(' '),fill:'#bfdbfe','fill-opacity':.6,stroke:'#1e3a8a','stroke-width':3,'stroke-linejoin':'round'},svg);
+  if(show.dia&&k===4){el('line',{x1:pts[0][0],y1:pts[0][1],x2:pts[2][0],y2:pts[2][1],stroke:'#7c3aed','stroke-width':2,'stroke-dasharray':'6 5'},svg);el('line',{x1:pts[1][0],y1:pts[1][1],x2:pts[3][0],y2:pts[3][1],stroke:'#7c3aed','stroke-width':2,'stroke-dasharray':'6 5'},svg);}
+  if(show.sym&&simple()){const {c,lines}=symLines(),C=S(c);lines.forEach(u=>{el('line',{x1:C[0]-u[0]*400,y1:C[1]-u[1]*400,x2:C[0]+u[0]*400,y2:C[1]+u[1]*400,stroke:'#dc2626','stroke-width':2.5,'stroke-dasharray':'10 6'},svg);});}
+  // equal-side ticks
+  const groups=[];s.forEach((v,i)=>{let g=groups.findIndex(G2=>eq(s[G2[0]],v));if(g<0){groups.push([i]);}else groups[g].push(i);});
+  let tickN=1;groups.filter(g=>g.length>1).forEach(g=>{g.forEach(i=>{const A=pts[i],B=pts[(i+1)%k],m=[(A[0]+B[0])/2,(A[1]+B[1])/2],d=sub(B,A),L=len(d),u=[d[0]/L,d[1]/L],n=[-u[1],u[0]];
+    for(let t=0;t<tickN;t++){const o=(t-(tickN-1)/2)*7;el('line',{x1:m[0]+u[0]*o-n[0]*9,y1:m[1]+u[1]*o-n[1]*9,x2:m[0]+u[0]*o+n[0]*9,y2:m[1]+u[1]*o+n[1]*9,stroke:'#1f2937','stroke-width':2.5},svg);}});tickN++;});
+  // parallel arrows
+  if(k===4){let pa=1;[[0,2],[1,3]].forEach(([i,j])=>{if(!parallel(i,j))return;[i,j].forEach(e=>{const A=pts[e],B=pts[(e+1)%k],d=sub(B,A),L=len(d),u=[d[0]/L,d[1]/L],n=[-u[1],u[0]];let m=[(A[0]+B[0])/2+u[0]*22,(A[1]+B[1])/2+u[1]*22];
+    const dir=e===j&&dot(sub(pts[(i+1)%k],pts[i]),d)<0?-1:1;for(let t=0;t<pa;t++){const q=[m[0]+u[0]*dir*t*9,m[1]+u[1]*dir*t*9];el('path',{d:`M${q[0]-u[0]*dir*8+n[0]*7} ${q[1]-u[1]*dir*8+n[1]*7} L${q[0]} ${q[1]} L${q[0]-u[0]*dir*8-n[0]*7} ${q[1]-u[1]*dir*8-n[1]*7}`,fill:'none',stroke:'#16a34a','stroke-width':2.5},svg);}});pa++;});}
+  // angles
+  const cen=P.reduce((q,b)=>[q[0]+b[0]/k,q[1]+b[1]/k],[0,0]),Cc=S(cen);
+  pts.forEach((p,i)=>{const A=pts[(i+k-1)%k],B=pts[(i+1)%k],u1=sub(A,p),u2=sub(B,p),l1=len(u1),l2=len(u2);if(!l1||!l2)return;const e1=[u1[0]/l1,u1[1]/l1],e2=[u2[0]/l2,u2[1]/l2];
+    if(rt(a[i])){const r=16;el('path',{d:`M${p[0]+e1[0]*r} ${p[1]+e1[1]*r} L${p[0]+e1[0]*r+e2[0]*r} ${p[1]+e1[1]*r+e2[1]*r} L${p[0]+e2[0]*r} ${p[1]+e2[1]*r}`,fill:'none',stroke:'#dc2626','stroke-width':2.5},svg);}
+    if(show.ang){const bis=[e1[0]+e2[0],e1[1]+e2[1]],bl=len(bis)||1;let dir=[bis[0]/bl,bis[1]/bl];const toC=sub(Cc,p);const inside=dot(dir,toC)>0||convex();if(!inside)dir=[-dir[0],-dir[1]];
+      txt(svg,p[0]+dir[0]*40,p[1]+dir[1]*40+5,Math.round(a[i])+'°',15,'#b91c1c','700');}});
+  if(show.len)pts.forEach((p,i)=>{const B=pts[(i+1)%k],m=[(p[0]+B[0])/2,(p[1]+B[1])/2],o=sub(m,Cc),ol=len(o)||1,v=s[i],t=Math.abs(v-Math.round(v))<0.005?String(Math.round(v)):v.toFixed(1);txt(svg,m[0]+o[0]/ol*26,m[1]+o[1]/ol*26+5,t,15,'#1e3a8a','700');});
+  pts.forEach((p,i)=>{const h=el('circle',{cx:p[0],cy:p[1],r:12,fill:'#f97316',stroke:'#fff','stroke-width':3,style:'cursor:grab'},svg);h.addEventListener('pointerdown',e=>{drag=i;svg.setPointerCapture(e.pointerId);e.preventDefault();});txt(svg,p[0]+(p[0]-Cc[0])*0.12,p[1]+(p[1]-Cc[1])*0.12-16,'ABCD'[i],15,'#475569','800');});
+  const c=classify(),sumA=convex()||k===3?Math.round(a.reduce((x,y)=>x+y,0)):360;
+  const sy=simple()?symLines().lines.length:0;
+  $('info').innerHTML=`<div class="big">${c.name}</div>${c.also.map(x=>`<div class="muted">${x}</div>`).join('')}
+   <div><b>Angles add to:</b> ${sumA}°</div><div><b>Right angles:</b> ${a.filter(rt).length}</div>
+   ${k===4?`<div><b>Pairs of parallel sides:</b> ${(parallel(0,2)?1:0)+(parallel(1,3)?1:0)}</div>`:''}
+   <div><b>Lines of symmetry:</b> ${show.sym?sy:'(press the button)'}</div>
+   <div class="muted" style="margin-top:6px">Side lengths are in grid units.</div>`;
+}
+svg.addEventListener('pointermove',e=>{if(drag===null)return;const p=pt(svg,e);let x=p.x/G,y=p.y/G;if(snap){x=Math.round(x);y=Math.round(y);}x=Math.max(0,Math.min(GW,x));y=Math.max(0,Math.min(GH,y));
+  if(P.some((q,i)=>i!==drag&&Math.abs(q[0]-x)<0.01&&Math.abs(q[1]-y)<0.01))return;P[drag]=[x,y];render();});
+svg.addEventListener('pointerup',()=>{drag=null;});
+function presets(){const sel=$('preset');sel.innerHTML='<option value="">Choose a shape…</option>'+Object.keys(PRE[k]).map(n=>`<option>${n}</option>`).join('');sel.onchange=()=>{if(!sel.value)return;P=PRE[k][sel.value].map(p=>p.slice());if(sel.value.includes('no grid')){snap=false;$('snapBtn').classList.remove('on');}render();};}
+document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{k=+b.dataset.k;document.querySelectorAll('[data-k]').forEach(x=>x.classList.toggle('on',x===b));P=Object.values(PRE[k])[k===3?0:6].map(p=>p.slice());presets();render();});
+[['lenBtn','len'],['angBtn','ang'],['symBtn','sym'],['diaBtn','dia']].forEach(([id,key])=>$(id).onclick=e=>{show[key]=!show[key];e.target.classList.toggle('on',show[key]);render();});
+$('snapBtn').onclick=e=>{snap=!snap;e.target.classList.toggle('on',snap);};
+presets();render();
+</script></body></html>

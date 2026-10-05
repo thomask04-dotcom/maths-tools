@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Algebra Tiles</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc}
+.title{font-weight:700;margin-right:6px}
+button{font:inherit;font-size:14px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#expr{margin-left:auto;font-size:18px;font-weight:600;padding:4px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Algebra Tiles</span>
+<button id="flipBtn">Flip sign</button>
+<button id="rotBtn">Rotate</button>
+<button id="delBtn">Delete</button>
+<button id="zeroBtn">Remove zero pairs</button>
+<button id="clearBtn">Clear</button>
+<button id="exprBtn" class="on">Show expression</button>
+<span id="expr">0</span>
+</div>
+<svg id="svg" viewBox="0 0 1000 560"></svg>
+<div class="hint">Drag tiles from the left onto the mat. Double-tap a tile to flip its sign. Tiles snap together at their edges. Drag a tile back to the left to remove it.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+
+const svg=document.getElementById('svg');
+const U=25,XL=90,PAL=220,VW=1000,VH=560;
+const DIM={x2:[XL,XL],x:[XL,U],one:[U,U]};
+const FILL={x2:'#60a5fa',x:'#4ade80',one:'#facc15'},NEG='#f87171';
+const LBL={x2:'x²',x:'x',one:'1'};
+const TEMPL=[
+ {t:'x2',s:1,x:18,y:34},{t:'x2',s:-1,x:118,y:34},
+ {t:'x',s:1,x:18,y:140},{t:'x',s:-1,x:118,y:140},
+ {t:'x',s:1,r:1,x:50,y:182},{t:'x',s:-1,r:1,x:150,y:182},
+ {t:'one',s:1,x:50,y:292},{t:'one',s:-1,x:150,y:292}];
+let tiles=[],uid=0,sel=null,drag=null,lastTap={id:null,t:0},showExpr=true;
+function dims(t){const d=DIM[t.t];return t.r?[d[1],d[0]]:d;}
+function drawTile(p,t,isSel){
+  const [w,h]=dims(t);const g=el('g',{transform:`translate(${t.x},${t.y})`,style:'cursor:grab'},p);
+  el('rect',{width:w,height:h,rx:3,fill:t.s>0?FILL[t.t]:NEG,stroke:isSel?'#1d4ed8':'#334155','stroke-width':isSel?3:1.5},g);
+  txt(g,w/2,h/2+5,(t.s<0?'−':'')+LBL[t.t],t.t==='one'?12:15);
+  return g;
+}
+function render(){
+  svg.innerHTML='';
+  const defs=el('defs',{},svg),pat=el('pattern',{id:'grid',width:U,height:U,patternUnits:'userSpaceOnUse'},defs);
+  el('path',{d:`M ${U} 0 L 0 0 0 ${U}`,fill:'none',stroke:'#e8edf3','stroke-width':1},pat);
+  const bg=el('rect',{x:PAL,y:0,width:VW-PAL,height:VH,fill:'url(#grid)'},svg);
+  bg.addEventListener('pointerdown',()=>{sel=null;render();});
+  el('rect',{x:0,y:0,width:PAL,height:VH,fill:'#f1f5f9'},svg);
+  el('line',{x1:PAL,x2:PAL,y1:0,y2:VH,stroke:'#cbd5e1'},svg);
+  txt(svg,63,24,'Positive',13,'#475569');txt(svg,163,24,'Negative',13,'#475569');
+  for(const tp of TEMPL){const g=drawTile(svg,tp,false);g.addEventListener('pointerdown',e=>spawn(tp,e));}
+  el('rect',{x:14,y:450,width:192,height:92,rx:10,fill:'#fff',stroke:'#94a3b8','stroke-dasharray':'6 5'},svg);
+  txt(svg,110,492,'🗑',22,'#64748b');txt(svg,110,520,'Drop here to remove',12,'#64748b');
+  for(const t of tiles){const g=drawTile(svg,t,t.id===sel);g.addEventListener('pointerdown',e=>startDrag(t,e,false));}
+  document.getElementById('expr').textContent=showExpr?expr():'?';
+}
+function spawn(tp,e){const t={id:++uid,t:tp.t,s:tp.s,r:tp.r||0,x:tp.x,y:tp.y};tiles.push(t);startDrag(t,e,true);}
+function startDrag(t,e,isNew){
+  const p=pt(svg,e);tiles=tiles.filter(q=>q!==t);tiles.push(t);
+  drag={t,dx:p.x-t.x,dy:p.y-t.y,moved:isNew,sx:p.x,sy:p.y};sel=t.id;
+  svg.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();render();
+}
+svg.addEventListener('pointermove',e=>{
+  if(!drag)return;const p=pt(svg,e);
+  if(Math.hypot(p.x-drag.sx,p.y-drag.sy)>3)drag.moved=true;
+  drag.t.x=p.x-drag.dx;drag.t.y=p.y-drag.dy;render();
+});
+svg.addEventListener('pointerup',()=>{
+  if(!drag)return;const t=drag.t,[w,h]=dims(t);
+  if(!drag.moved){const now=Date.now();if(lastTap.id===t.id&&now-lastTap.t<350){t.s*=-1;lastTap={id:null,t:0};}else lastTap={id:t.id,t:now};}
+  else if(t.x+w/2<PAL){tiles=tiles.filter(q=>q!==t);sel=null;}
+  else{snap(t);t.x=Math.max(PAL,Math.min(VW-w,t.x));t.y=Math.max(0,Math.min(VH-h,t.y));}
+  drag=null;render();
+});
+function snap(t){
+  const [w,h]=dims(t);let bx=null,by=null,bdx=11,bdy=11;
+  for(const o of tiles){if(o===t)continue;const [ow,oh]=dims(o);
+    const nearY=t.y<o.y+oh+12&&t.y+h>o.y-12,nearX=t.x<o.x+ow+12&&t.x+w>o.x-12;
+    if(nearY)for(const c of [o.x+ow,o.x-w,o.x,o.x+ow-w]){const d=Math.abs(c-t.x);if(d<bdx){bdx=d;bx=c;}}
+    if(nearX)for(const c of [o.y+oh,o.y-h,o.y,o.y+oh-h]){const d=Math.abs(c-t.y);if(d<bdy){bdy=d;by=c;}}
+  }
+  if(bx!==null)t.x=bx;if(by!==null)t.y=by;
+}
+function expr(){
+  const c={x2:0,x:0,one:0};tiles.forEach(t=>c[t.t]+=t.s);let s='';
+  for(const [k,v] of [[c.x2,'x²'],[c.x,'x'],[c.one,'']]){if(!k)continue;const a=Math.abs(k),body=(v&&a===1?'':a)+v;s+=s?(k<0?' − ':' + ')+body:(k<0?'−':'')+body;}
+  return s||'0';
+}
+function selTile(){return tiles.find(t=>t.id===sel);}
+function flip(){const t=selTile();if(t){t.s*=-1;render();}}
+function rot(){const t=selTile();if(t&&t.t==='x'){t.r=t.r?0:1;render();}}
+function del(){tiles=tiles.filter(t=>t.id!==sel);sel=null;render();}
+document.getElementById('flipBtn').onclick=flip;
+document.getElementById('rotBtn').onclick=rot;
+document.getElementById('delBtn').onclick=del;
+document.getElementById('clearBtn').onclick=()=>{tiles=[];sel=null;render();};
+document.getElementById('zeroBtn').onclick=()=>{
+  for(const ty of ['x2','x','one']){const P=tiles.filter(t=>t.t===ty&&t.s>0),N=tiles.filter(t=>t.t===ty&&t.s<0),k=Math.min(P.length,N.length);
+    const rm=new Set([...P.slice(0,k),...N.slice(0,k)]);tiles=tiles.filter(t=>!rm.has(t));}
+  render();
+};
+document.getElementById('exprBtn').onclick=e=>{showExpr=!showExpr;e.target.classList.toggle('on',showExpr);render();};
+document.addEventListener('keydown',e=>{if(e.key==='Delete'||e.key==='Backspace')del();else if(e.key==='r'||e.key==='R')rot();else if(e.key==='f'||e.key==='F')flip();});
+render();
+</script></body></html>

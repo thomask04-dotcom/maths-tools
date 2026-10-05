@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Equivalent Fractions</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:6px 11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.v{font-size:19px;font-weight:800;min-width:26px;text-align:center}
+#say{font-size:20px;padding:8px 14px;min-height:46px;line-height:1.5}
+svg{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Equivalent Fractions</span>
+<button data-t="both" class="on">Cut both ways</button><button data-t="common">Common denominator</button><button data-t="whole">Find the whole</button>
+</div>
+<div class="bar" id="ctl"></div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 420"></svg>
+<div class="hint">Cutting the same rectangle into more pieces doesn't change how much is shaded: 2/3 = 4/6 = 6/9. Cutting two fractions both ways gives them the same-sized pieces (a common denominator), so you can compare or add them.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function frac(x,y,n,d,fs,col){txt(svg,x,y-fs*0.22,String(n),fs*0.85,col,'800');el('line',{x1:x-fs*0.55,x2:x+fs*0.55,y1:y,y2:y,stroke:col,'stroke-width':2.5},svg);txt(svg,x,y+fs*0.85,String(d),fs*0.85,col,'800');}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+let tab='both',A={a:3,p:2,b:1},C={p:1,a:3,q:1,c:4,cut:false},W={p:3,d:5,len:12,step:0};
+function gcd(a,b){while(b)[a,b]=[b,a%b];return a;}
+function stepper(obj,key,label,min,max){return `<span>${label}</span><button data-s="${key},-1">−</button><span class="v">${obj[key]}</span><button data-s="${key},1">+</button>`;}
+function ctl(){
+  const Cc=$('ctl');
+  if(tab==='both')Cc.innerHTML=stepper(A,'p','Shaded',0,12)+stepper(A,'a','Columns',1,10)+stepper(A,'b','Rows (cut across)',1,8);
+  if(tab==='common')Cc.innerHTML=stepper(C,'p','First:',0,10)+'<b>/</b>'+stepper(C,'a','',1,10)+' &nbsp; '+stepper(C,'q','Second:',0,10)+'<b>/</b>'+stepper(C,'c','',1,10)+`<button id="cutB" class="${C.cut?'on':''}">✂ Cut both ways</button>`;
+  if(tab==='whole')Cc.innerHTML='<button id="newW">🎲 New problem</button><button id="stepW">Next step ▶</button>';
+  const obj=tab==='both'?A:C,lim={p:[0,10],a:[1,10],b:[1,8],q:[0,10],c:[1,10]};
+  Cc.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{const [k,d]=b.dataset.s.split(',');obj[k]=Math.max(lim[k][0],Math.min(lim[k][1],obj[k]+ +d));if(obj.p>obj.a)obj.p=obj.a;if(obj.q!==undefined&&obj.q>obj.c)obj.q=obj.c;ctl();render();});
+  if($('cutB'))$('cutB').onclick=()=>{C.cut=!C.cut;ctl();render();};
+  if($('newW'))$('newW').onclick=()=>{W.d=[3,4,5,6,8][Math.floor(Math.random()*5)];W.p=2+Math.floor(Math.random()*(W.d-2));W.len=W.p*(1+Math.floor(Math.random()*5));W.step=0;render();};
+  if($('stepW'))$('stepW').onclick=()=>{if(W.step<2)W.step++;render();};
+}
+function rectGrid(x,y,w,h,cols,rows,shadeCols,col,label){
+  for(let i=0;i<cols;i++)for(let j=0;j<rows;j++)el('rect',{x:x+i*w/cols,y:y+j*h/rows,width:w/cols,height:h/rows,fill:i<shadeCols?col:'#fff',stroke:'#1f2937','stroke-width':1.5},svg);
+  el('rect',{x,y,width:w,height:h,fill:'none',stroke:'#1f2937','stroke-width':3.5},svg);
+}
+function rectGridRows(x,y,w,h,cols,rows,shadeRows,col){
+  for(let i=0;i<cols;i++)for(let j=0;j<rows;j++)el('rect',{x:x+i*w/cols,y:y+j*h/rows,width:w/cols,height:h/rows,fill:j<shadeRows?col:'#fff',stroke:'#1f2937','stroke-width':1.5},svg);
+  el('rect',{x,y,width:w,height:h,fill:'none',stroke:'#1f2937','stroke-width':3.5},svg);
+}
+function render(){
+  svg.innerHTML='';let s='';
+  if(tab==='both'){svg.setAttribute('viewBox','0 0 1000 380');const {a,p,b}=A;
+    rectGrid(120,40,480,300,a,b,p,'#fb923c');
+    frac(720,150,p,a,56,'#111827');if(b>1){txt(svg,800,165,'=',48,'#111827','800');frac(880,150,p*b,a*b,56,'#c2410c');}
+    s=b>1?`Cutting across into ${b} rows makes every piece ${b} times smaller, so there are ${b} times as many pieces: <b>${p}/${a} = ${p}×${b}/${a}×${b} = ${p*b}/${a*b}</b>. The shaded amount hasn't changed.`:`<b>${p}/${a}</b> is shaded. Now cut across (add rows) and watch what happens.`;
+    const g=gcd(p,a);if(g>1&&p)s+=` Also, ${p}/${a} = ${p/g}/${a/g}.`;}
+  if(tab==='common'){svg.setAttribute('viewBox','0 0 1000 420');const {p,a,q,c,cut}=C;
+    if(!cut){rectGrid(60,60,380,250,a,1,p,'#fb923c');rectGridRows(560,60,380,250,1,c,q,'#60a5fa');}
+    else{rectGrid(60,60,380,250,a,c,p,'#fb923c');rectGridRows(560,60,380,250,a,c,q,'#60a5fa');}
+    frac(250,360,cut?p*c:p,cut?a*c:a,34,'#c2410c');frac(750,360,cut?q*a:q,cut?a*c:c,34,'#1d4ed8');
+    txt(svg,500,200,p*c>q*a?'>':p*c<q*a?'<':'=',60,'#111827','800');
+    s=!cut?`Which is bigger, <b>${p}/${a}</b> or <b>${q}/${c}</b>? The pieces are different sizes, so it's hard to tell. Press "Cut both ways".`:
+      `Cutting both ways makes ${a} × ${c} = ${a*c} equal pieces in each whole. ${p}/${a} = <b>${p*c}/${a*c}</b> and ${q}/${c} = <b>${q*a}/${a*c}</b>. So ${p}/${a} ${p*c>q*a?'>':p*c<q*a?'<':'='} ${q}/${c}. Together they make ${p*c+q*a}/${a*c}${p*c+q*a>a*c?` = 1 and ${p*c+q*a-a*c}/${a*c}`:''}.`;}
+  if(tab==='whole'){svg.setAttribute('viewBox','0 0 1000 360');const {p,d,len,step}=W,U=600/d,x0=100;
+    el('rect',{x:x0,y:60,width:p*U,height:60,fill:'#86efac',stroke:'#1f2937','stroke-width':3},svg);txt(svg,x0+p*U/2,98,`${len} cm`,22,'#14532d','800');
+    txt(svg,x0-10,98,'',16);txt(svg,x0+p*U+16,98,`← this is ${p}/${d} of the ribbon`,18,'#334155','700','start');
+    if(step>=1)for(let i=1;i<p;i++)el('line',{x1:x0+i*U,x2:x0+i*U,y1:60,y2:120,stroke:'#1f2937','stroke-width':2.5,'stroke-dasharray':'6 4'},svg);
+    if(step>=1)for(let i=0;i<p;i++)txt(svg,x0+i*U+U/2,145,`${len/p} cm`,15,'#15803d','700');
+    if(step>=2){for(let i=0;i<d;i++)el('rect',{x:x0+i*U,y:200,width:U,height:60,fill:i<p?'#86efac':'#fde68a',stroke:'#1f2937','stroke-width':2.5},svg);txt(svg,x0+d*U/2,290,`whole ribbon = ${d} × ${len/p} = ${d*len/p} cm`,22,'#111827','800');}
+    s=[`${len} cm is <b>${p}/${d}</b> of a ribbon. How long is the whole ribbon? Press "Next step".`,`Split the ${p}/${d} into ${p} equal parts: each is <b>1/${d}</b> = ${len} ÷ ${p} = <b>${len/p} cm</b>.`,`The whole is ${d}/${d}: ${d} × ${len/p} = <b>${d*len/p} cm</b>.`][step];}
+  $('say').innerHTML=s;
+}
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b));ctl();render();});
+ctl();render();
+</script></body></html>

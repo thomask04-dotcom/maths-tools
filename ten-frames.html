@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ten Frames</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:16px;padding:8px 14px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.dot{display:inline-block;width:18px;height:18px;border-radius:50%;vertical-align:middle}
+#num{margin-left:auto;font-size:30px;font-weight:800;min-width:60px;text-align:center;padding:0 12px;background:#fff;border:2px solid #e5e7eb;border-radius:12px}
+#say{font-size:22px;padding:10px 14px;min-height:48px}
+#answers{display:none;flex-wrap:wrap;gap:8px;padding:10px 14px}
+#answers button{font-size:24px;font-weight:700;width:62px;height:62px}
+#fb{font-size:22px;font-weight:700;padding:0 14px}
+svg{display:block;width:100%;max-width:980px;margin:0 auto;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Ten Frames</span>
+<button data-m="5">Five frame</button><button data-m="10" class="on">Ten frame</button><button data-m="20">Two ten frames</button>
+<span id="num">0</span>
+</div>
+<div class="bar">
+<button id="cRed" class="on"><span class="dot" style="background:#ef4444"></span> Red</button>
+<button id="cYel"><span class="dot" style="background:#facc15"></span> Yellow</button>
+<button id="plus">+1</button><button id="minus">−1</button><button id="fill">Fill</button><button id="clear">Clear</button>
+<button id="showBtn" class="on">Show number</button>
+<button id="flashBtn">⚡ Quick look</button>
+</div>
+<div id="say"></div>
+<svg id="svg"></svg>
+<div id="answers"></div><div id="fb"></div>
+<div class="hint">Tap an empty square to add a counter, and tap a counter to take it away. Quick look shows some counters for 2 seconds, then asks how many there were.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),C=150,PAD=20,COL={r:'#ef4444',y:'#facc15'};
+let mode=10,cells=Array(20).fill(null),colour='r',showN=true,flash=null;
+function cap(){return mode;}
+function render(){
+  svg.innerHTML='';
+  const frames=mode===20?2:1,cols=5,rows=mode===5?1:2,GAP=50,W=frames*cols*C+(frames-1)*GAP+PAD*2,H=rows*C+PAD*2;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  for(let f=0;f<frames;f++){
+    const oy=PAD,ox=PAD+f*(cols*C+GAP);
+    el('rect',{x:ox-6,y:oy-6,width:cols*C+12,height:rows*C+12,rx:12,fill:'#1e3a8a'},svg);
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      const i=f*10+r*5+c,x=ox+c*C,y=oy+r*C;
+      const g=el('g',{style:'cursor:pointer'},svg);
+      el('rect',{x:x+3,y:y+3,width:C-6,height:C-6,rx:8,fill:'#fff'},g);
+      const v=flash?flash.cells[i]:cells[i];
+      if(v)el('circle',{cx:x+C/2,cy:y+C/2,r:C*0.36,fill:COL[v],stroke:v==='y'?'#ca8a04':'#b91c1c','stroke-width':4},g);
+      g.addEventListener('pointerdown',()=>{if(flash)return;cells[i]=cells[i]?null:colour;update();});
+    }
+  }
+  if(flash&&flash.hidden){el('rect',{x:0,y:0,width:W,height:H,rx:14,fill:'#334155'},svg);const t=el('text',{x:W/2,y:H/2+20,'font-size':60,'text-anchor':'middle',fill:'#fff','font-weight':700},svg);t.textContent='How many?';}
+}
+function count(v){return cells.slice(0,mode).filter(x=>v?x===v:x).length;}
+function update(){
+  const n=count(),r=count('r'),y=count('y');
+  $('num').textContent=showN?n:'?';
+  let s='';
+  if(showN&&n){
+    if(r&&y)s=`${r} red and ${y} yellow make <b>${n}</b>.`;
+    else s=`There ${n===1?'is':'are'} <b>${n}</b> counter${n===1?'':'s'}.`;
+    if(mode!==20&&n<mode)s+=` ${mode-n} more make${mode-n===1?'s':''} ${mode}.`;
+    if(mode===20&&n>10)s+=` That is 10 and ${n-10}.`;
+    if(mode===20&&n<20)s+=` ${20-n} more make 20.`;
+  }
+  $('say').innerHTML=s;render();
+}
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=+b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));for(let i=mode;i<20;i++)cells[i]=null;endFlash();update();});
+$('cRed').onclick=()=>{colour='r';$('cRed').classList.add('on');$('cYel').classList.remove('on');};
+$('cYel').onclick=()=>{colour='y';$('cYel').classList.add('on');$('cRed').classList.remove('on');};
+$('plus').onclick=()=>{const i=cells.slice(0,mode).indexOf(null);if(i>=0){cells[i]=colour;update();}};
+$('minus').onclick=()=>{for(let i=mode-1;i>=0;i--)if(cells[i]){cells[i]=null;break;}update();};
+$('fill').onclick=()=>{for(let i=0;i<mode;i++)if(!cells[i])cells[i]=colour;update();};
+$('clear').onclick=()=>{cells.fill(null);update();};
+$('showBtn').onclick=e=>{showN=!showN;e.target.classList.toggle('on',showN);update();};
+function endFlash(){flash=null;$('answers').style.display='none';$('fb').textContent='';$('flashBtn').classList.remove('on');}
+$('flashBtn').onclick=()=>{
+  const n=Math.floor(Math.random()*(mode+1)),arr=Array(20).fill(null);
+  // ten frames are filled in order (top row first), which is how students learn them
+  for(let i=0;i<n;i++)arr[i]='r';
+  flash={cells:arr,n,hidden:false};$('flashBtn').classList.add('on');$('fb').textContent='';$('say').innerHTML='Look quickly…';$('num').textContent='?';
+  const A=$('answers');A.innerHTML='';A.style.display='none';
+  render();
+  setTimeout(()=>{if(!flash)return;flash.hidden=true;render();$('say').innerHTML='How many counters did you see?';
+    for(let k=0;k<=mode;k++){const b=document.createElement('button');b.textContent=k;b.onclick=()=>{
+      if(!flash)return;
+      if(k===flash.n){$('fb').textContent='✓ Yes! It was '+k+'.';$('fb').style.color='#15803d';flash.hidden=false;render();A.style.display='none';setTimeout(()=>{endFlash();update();$('say').innerHTML='Press ⚡ Quick look for another one.';},2200);}
+      else{$('fb').textContent='Try again!';$('fb').style.color='#b91c1c';}
+    };A.appendChild(b);}
+    A.style.display='flex';},2000);
+};
+update();
+</script></body></html>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arrays</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:16px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.v{font-size:22px;font-weight:800;min-width:34px;text-align:center}
+#eq{font-size:22px;padding:8px 14px;line-height:1.7;min-height:44px}
+svg{display:block;width:100%;max-width:880px;margin:0 auto;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Arrays</span>
+<span>Rows</span><button id="rm">−</button><span class="v" id="rv">3</span><button id="rp">+</button>
+<span>Columns</span><button id="cm">−</button><span class="v" id="cv">4</span><button id="cp">+</button>
+<button id="turnBtn">↻ Turn it</button>
+<button id="splitBtn">✂ Split</button>
+<button id="coverBtn">🙈 Cover part</button>
+<span>Left over:</span><button id="em">−</button><span class="v" id="ev">0</span><button id="ep">+</button>
+</div>
+<div class="bar">
+<span>Show:</span><button data-s="rows" class="on">Rows of</button><button data-s="add" class="on">Repeated addition</button><button data-s="mult">Multiplication</button><button data-s="div">Division</button>
+<button id="totBtn" class="on">Show total</button>
+<button id="shapeBtn">Squares</button>
+</div>
+<div id="eq"></div>
+<svg id="svg"></svg>
+<div class="hint">Use − and + to change the rows and columns. "Turn it" swaps rows and columns, and the total stays the same. "Split" adds a line you can drag to break the array into two smaller arrays.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+let cover=false,extra=0,R=3,C=4,split=0,squares=false,showT=true,shows=new Set(['rows','add']),drag=false;
+const S=56,X0=70,Y0=40;
+function render(){
+  svg.innerHTML='';
+  const W=X0+C*S+40,H=Y0+(R+(extra?1:0))*S+40;svg.setAttribute('viewBox',`0 0 ${Math.max(W,500)} ${H}`);
+  for(let r=0;r<R;r++){
+    txt(svg,X0-24,Y0+r*S+S/2+6,String(r+1),14,'#94a3b8');
+    for(let c=0;c<C;c++){
+      const x=X0+c*S+S/2,y=Y0+r*S+S/2,top=split&&r<split,col=split?(top?'#ef4444':'#2563eb'):'#ef4444';
+      if(squares)el('rect',{x:x-S/2+1,y:y-S/2+1,width:S-2,height:S-2,fill:split?(top?'#fecaca':'#bfdbfe'):'#fecaca',stroke:col,'stroke-width':2},svg);
+      else el('circle',{cx:x,cy:y,r:S*0.36,fill:col},svg);
+    }
+  }
+  for(let e=0;e<extra;e++){const x=X0+e*S+S/2,y=Y0+R*S+S/2;if(squares)el('rect',{x:x-S/2+1,y:y-S/2+1,width:S-2,height:S-2,fill:'#fef08a',stroke:'#ca8a04','stroke-width':2},svg);else el('circle',{cx:x,cy:y,r:S*0.36,fill:'#eab308'},svg);}
+  if(cover&&R>1&&C>1){el('rect',{x:X0+S-2,y:Y0+S-2,width:(C-1)*S+4,height:(R-1)*S+4,rx:8,fill:'#475569'},svg);txt(svg,X0+S+(C-1)*S/2,Y0+S+(R-1)*S/2+12,'?',40,'#fff','800');}
+  for(let c=0;c<C;c++)txt(svg,X0+c*S+S/2,Y0-12,String(c+1),14,'#94a3b8');
+  if(split){
+    const y=Y0+split*S;
+    el('line',{x1:X0-10,x2:X0+C*S+10,y1:y,y2:y,stroke:'#111827','stroke-width':4,'stroke-dasharray':'10 6'},svg);
+    const h=el('circle',{cx:X0+C*S+22,cy:y,r:14,fill:'#111827',style:'cursor:ns-resize'},svg);
+    txt(svg,X0+C*S+22,y+5,'↕',14,'#fff','700');
+    h.addEventListener('pointerdown',e=>{drag=true;svg.setPointerCapture(e.pointerId);e.preventDefault();});
+  }
+  const T=R*C,tot=showT?T:'?',lines=[];
+  if(shows.has('rows'))lines.push(`${R} row${R>1?'s':''} of ${C} = ${tot}`);
+  if(shows.has('add'))lines.push(Array(R).fill(C).join(' + ')+` = ${tot}`);
+  if(shows.has('mult')){lines.push(`${R} × ${C} = ${tot}`+(R!==C?` &nbsp; and &nbsp; ${C} × ${R} = ${tot}`:''));}
+  if(shows.has('div'))lines.push(`${tot} ÷ ${R} = ${showT?C:'?'}`+(R!==C?` &nbsp; and &nbsp; ${tot} ÷ ${C} = ${showT?R:'?'}`:''));
+  if(split)lines.push(`<span style="color:#ef4444">${split} × ${C} = ${showT?split*C:'?'}</span> &nbsp;+&nbsp; <span style="color:#2563eb">${R-split} × ${C} = ${showT?(R-split)*C:'?'}</span> &nbsp;→&nbsp; ${R} × ${C} = ${tot}`);
+  if(extra){const TT=T+extra,t2=showT?TT:'?';lines.push(`<span style="color:#a16207">${R} × ${C} + ${extra} = ${t2} &nbsp; → &nbsp; ${t2} ÷ ${C} = ${R} remainder ${extra}</span>`);}
+  if(cover)lines.unshift('Part of the array is covered. How many are there altogether? You can see how many are in one row and one column.');
+  $('eq').innerHTML=lines.join('<br>');$('ev').textContent=extra;
+  $('rv').textContent=R;$('cv').textContent=C;
+}
+svg.addEventListener('pointermove',e=>{if(!drag)return;const y=pt(svg,e).y;const k=Math.max(1,Math.min(R-1,Math.round((y-Y0)/S)));if(k!==split){split=k;render();}});
+svg.addEventListener('pointerup',()=>{drag=false;});
+function set(r,c){R=Math.max(1,Math.min(12,r));C=Math.max(1,Math.min(12,c));extra=Math.min(extra,C-1);if(split>=R)split=R>1?R-1:0;render();}
+$('rm').onclick=()=>set(R-1,C);$('rp').onclick=()=>set(R+1,C);$('cm').onclick=()=>set(R,C-1);$('cp').onclick=()=>set(R,C+1);
+$('coverBtn').onclick=e=>{cover=!cover;e.target.classList.toggle('on',cover);render();};
+$('em').onclick=()=>{extra=Math.max(0,extra-1);render();};$('ep').onclick=()=>{extra=Math.min(C-1,extra+1);render();};
+$('turnBtn').onclick=()=>{split=0;$('splitBtn').classList.remove('on');set(C,R);};
+$('splitBtn').onclick=e=>{if(R<2)return;split=split?0:Math.floor(R/2);e.target.classList.toggle('on',!!split);render();};
+document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{const s=b.dataset.s;shows.has(s)?shows.delete(s):shows.add(s);b.classList.toggle('on',shows.has(s));render();});
+$('totBtn').onclick=e=>{showT=!showT;e.target.classList.toggle('on',showT);render();};
+$('shapeBtn').onclick=e=>{squares=!squares;e.target.classList.toggle('on',squares);render();};
+render();
+</script></body></html>

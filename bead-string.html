@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bead String & Rekenrek</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input{font:inherit;font-size:15px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input{width:64px;text-align:center}
+#num{margin-left:auto;font-size:26px;font-weight:800;padding:2px 14px;background:#fff;border:2px solid #e5e7eb;border-radius:10px;min-width:60px;text-align:center}
+#say{font-size:21px;padding:8px 14px;min-height:44px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Bead String & Rekenrek</span>
+<button data-m="s20" class="on">Bead string 20</button><button data-m="s100">Bead string 100</button><button data-m="r20">Rekenrek 20</button><button data-m="r100">Rekenrek 100</button>
+<span id="num">0</span>
+</div>
+<div class="bar">
+<button id="nlBtn" class="on">Number line</button>
+<span id="addWrap">Show <input id="aIn" type="number" value="8"> + <input id="bIn" type="number" value="5"> <button id="addBtn">▶ Go</button></span>
+<button id="flashBtn">⚡ Quick look</button>
+<button id="showBtn" class="on">Show number</button>
+<button id="clearBtn">Reset</button>
+</div>
+<div id="say"></div>
+<svg id="svg"></svg>
+<div class="hint">Bead string: tap a bead to move the peg to it, and the beads up to the peg are counted. The beads come in groups of 5 colours, so you can see 5s and 10s without counting by ones. Rekenrek: tap a bead to slide it (and the beads before it) to the left. "Show 8 + 5" shows how to bridge through 10.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),RED='#dc2626',WHITE='#f8fafc';
+let mode='s20',k=0,rows=[0,0],nl=true,showN=true,add=null,flash=false;
+function nBeads(){return mode.endsWith('100')?100:20;}
+function beadCol(i){return Math.floor(i/5)%2===0?RED:WHITE;}
+function bead(g,x,y,r,col,faded,ring){
+  const c=el('circle',{cx:x,cy:y,r,fill:col,stroke:col===WHITE?'#64748b':'#7f1d1d','stroke-width':2,opacity:faded?.3:1,style:'cursor:pointer'},g);
+  if(ring)el('circle',{cx:x,cy:y,r:r+5,fill:'none',stroke:ring,'stroke-width':4,'pointer-events':'none'},g);
+  return c;
+}
+function render(){
+  svg.innerHTML='';
+  if(mode==='s20'){
+    const D=44,X0=40,Y=90;svg.setAttribute('viewBox','0 0 1000 300');
+    el('line',{x1:20,x2:X0+20*D+20,y1:Y,y2:Y,stroke:'#475569','stroke-width':4},svg);
+    for(let i=0;i<20;i++){
+      const x=X0+i*D+D/2;let ring=null;
+      if(add){if(i<add.a)ring='#2563eb';else if(i<add.a+add.b)ring='#16a34a';}
+      bead(svg,x,Y,D*0.44,beadCol(i),i>=k&&!add,ring).addEventListener('pointerdown',()=>{if(flash)return;add=null;k=i+1===k?i:i+1;update();});
+    }
+    if(!add&&k>0&&flash!=='hide'){const px=X0+k*D;el('rect',{x:px-4,y:Y-40,width:8,height:80,rx:3,fill:'#f59e0b'},svg);}
+    if(nl){
+      const ly=210;el('line',{x1:X0,x2:X0+20*D,y1:ly,y2:ly,stroke:'#1f2937','stroke-width':2.5},svg);
+      for(let i=0;i<=20;i++){const x=X0+i*D;el('line',{x1:x,x2:x,y1:ly-(i%5?7:13),y2:ly+(i%5?7:13),stroke:'#1f2937','stroke-width':i%5?1.5:2.5},svg);if(i%5===0||(add&&[add.a,add.mid,add.a+add.b].includes(i))||(!add&&i===k))txt(svg,x,ly+34,String(i),i%10?15:18,'#111827',i%10?'normal':'700');}
+      if(add){jump(0,add.a,'#2563eb',ly,X0,D,''+add.a);if(add.mid>add.a&&add.mid<add.a+add.b){jump(add.a,add.mid,'#16a34a',ly,X0,D,'+'+(add.mid-add.a));jump(add.mid,add.a+add.b,'#16a34a',ly,X0,D,'+'+(add.a+add.b-add.mid));}else jump(add.a,add.a+add.b,'#16a34a',ly,X0,D,'+'+add.b);}
+      else if(k&&!flash)el('circle',{cx:X0+k*D,cy:ly,r:8,fill:'#f59e0b'},svg);
+    }
+  } else if(mode==='s100'){
+    const D=44,X0=60,RH=70;svg.setAttribute('viewBox',`0 0 1000 ${5*RH+40}`);
+    for(let r=0;r<5;r++){const y=40+r*RH;el('line',{x1:X0-10,x2:X0+20*D+10,y1:y,y2:y,stroke:'#475569','stroke-width':3},svg);txt(svg,X0-20,y+6,String(r*20),14,'#64748b','normal','end');
+      for(let j=0;j<20;j++){const i=r*20+j;bead(svg,X0+j*D+D/2,y,D*0.42,Math.floor(i/10)%2===0?RED:WHITE,i>=k).addEventListener('pointerdown',()=>{if(flash)return;k=i+1===k?i:i+1;update();});}}
+    if(k>0&&k<100&&!flash){const r=Math.floor(k/20),j=k%20,y=40+(j===0?r-1:r)*RH,x=X0+(j===0?20:j)*D;el('rect',{x:x-4,y:y-28,width:8,height:56,rx:3,fill:'#f59e0b'},svg);}
+  } else {
+    const R=mode==='r20'?2:10,D=mode==='r20'?52:40,RH=mode==='r20'?90:52,X0=60,W=10*D+6*D,frameW=W+40;
+    svg.setAttribute('viewBox',`0 0 1000 ${R*RH+50}`);
+    el('rect',{x:X0-20,y:10,width:frameW,height:R*RH+20,rx:14,fill:'none',stroke:'#92400e','stroke-width':10},svg);
+    for(let r=0;r<R;r++){const y=20+r*RH+RH/2,kk=rows[r];
+      el('line',{x1:X0-15,x2:X0+W+15,y1:y,y2:y,stroke:'#475569','stroke-width':3},svg);
+      for(let i=0;i<10;i++){const x=i<kk?X0+i*D+D/2:X0+W-(10-i)*D+D/2;
+        bead(svg,x,y,D*0.46,i<5?RED:WHITE,false).addEventListener('pointerdown',()=>{if(flash)return;rows[r]=i<kk?i:i+1;update();});}
+      if(showN&&!flash&&mode==='r20')txt(svg,X0+W+70,y+8,String(kk),26,'#111827','800');
+    }
+    if(flash){const h=el('rect',{x:X0-26,y:4,width:frameW+12,height:R*RH+32,rx:16,fill:'#334155'},svg);h.style.display=flash==='hide'?'':'none';}
+  }
+}
+function jump(a,b,col,ly,X0,D,label){const x1=X0+a*D,x2=X0+b*D,h=Math.min(70,18+(x2-x1)*0.18),mx=(x1+x2)/2;
+  el('path',{d:`M${x1} ${ly-4} Q${mx} ${ly-4-2*h} ${x2} ${ly-4}`,fill:'none',stroke:col,'stroke-width':3},svg);
+  el('polygon',{points:`${x2},${ly-4} ${x2-9},${ly-14} ${x2-2},${ly-17}`,fill:col},svg);txt(svg,mx,ly-10-h,label,17,col,'800');}
+function total(){return mode.startsWith('s')?(add?add.a+add.b:k):rows.reduce((s,v)=>s+v,0);}
+function update(){
+  const t=total();$('num').textContent=showN&&flash!=='hide'?t:'?';let s='';
+  if(add){s=add.mid>add.a&&add.mid<add.a+add.b?`${add.a} + ${add.b}: make 10 first. ${add.a} + ${add.mid-add.a} = ${add.mid}, then ${add.mid} + ${add.a+add.b-add.mid} = <b>${add.a+add.b}</b>`:`${add.a} + ${add.b} = <b>${add.a+add.b}</b>`;}
+  else if(showN&&t&&!flash){
+    if(mode.startsWith('r')&&mode==='r20'){const [a,b]=rows;s=a&&b?`${a} on top and ${b} underneath make <b>${t}</b>.`:`<b>${t}</b>`;if(a>5)s+=` The top row is 5 and ${a-5}.`;}
+    else{const tens=Math.floor(t/10),ones=t%10;s=t>=10?`<b>${t}</b> is ${tens} ten${tens>1?'s':''}${ones?' and '+ones:''}.`:t>5?`<b>${t}</b> is 5 and ${t-5}.`:`<b>${t}</b>`;if(mode!=='s100'&&t<20&&!mode.startsWith('r'))s+=` ${10*Math.ceil(t/10||1)-t||10} more to make ${10*Math.ceil((t+1)/10)}.`;}
+  }
+  $('say').innerHTML=s;render();
+}
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));k=0;rows=Array(mode==='r100'?10:2).fill(0);add=null;flash=false;$('addWrap').style.display=mode==='s20'?'':'none';$('nlBtn').style.display=mode==='s20'?'':'none';update();});
+$('nlBtn').onclick=e=>{nl=!nl;e.target.classList.toggle('on',nl);render();};
+$('addBtn').onclick=()=>{const a=Math.max(0,Math.min(20,Math.round(+$('aIn').value||0))),b=Math.max(0,Math.min(20-a,Math.round(+$('bIn').value||0)));$('aIn').value=a;$('bIn').value=b;add={a,b,mid:10*Math.ceil((a+0.001)/10)};if(!nl){nl=true;$('nlBtn').classList.add('on');}update();};
+$('showBtn').onclick=e=>{showN=!showN;e.target.classList.toggle('on',showN);update();};
+$('clearBtn').onclick=()=>{k=0;rows=rows.map(()=>0);add=null;update();};
+$('flashBtn').onclick=()=>{
+  const max=nBeads();add=null;
+  if(mode.startsWith('s'))k=1+Math.floor(Math.random()*max);else rows=rows.map(()=>Math.floor(Math.random()*11));
+  flash='show';$('say').innerHTML='Quick! How many?';update();
+  setTimeout(()=>{if(mode.startsWith('s')){flash='hide';render();svg.querySelectorAll('circle').forEach(c=>c.setAttribute('opacity',0.05));}else{flash='hide';render();}
+    $('num').textContent='?';$('say').innerHTML='How many beads were counted? <button id="rev">Show me</button>';$('rev').onclick=()=>{flash=false;update();};},2000);
+};
+update();
+</script></body></html>

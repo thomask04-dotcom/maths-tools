@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Teaching Clock</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.wrap{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:24px;padding:12px}
+svg{width:100%;max-width:440px;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.info{min-width:260px;flex:1;max-width:420px}
+.digital{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:54px;font-weight:800;background:#111827;color:#4ade80;border-radius:14px;padding:6px 18px;text-align:center;margin-bottom:10px}
+.d24{font-size:22px;color:#334155;text-align:center;margin-bottom:8px}
+.words{font-size:28px;font-weight:700;text-align:center;color:#1e3a8a;min-height:40px}
+#task{font-size:22px;padding:8px 14px;background:#fef9c3;display:none}
+#opts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+#opts button{font-size:20px;font-weight:700}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Teaching Clock</span>
+<span>Step:</span><button data-s="60">o'clock</button><button data-s="30">half hour</button><button data-s="15" class="on">quarter hour</button><button data-s="5">5 min</button><button data-s="1">1 min</button>
+<button id="ampm">☀️ am</button>
+</div>
+<div class="bar">
+<span>Show:</span><button id="digBtn" class="on">Digital</button><button id="h24Btn">24-hour time</button><button id="wordBtn" class="on">Words</button><button id="minBtn">Minute numbers</button><button id="halfBtn">Past / to</button>
+<button id="setBtn">🎯 Set the clock</button><button id="readBtn">❓ What time is it?</button>
+</div>
+<div id="task"><span id="taskText"></span> <button id="checkBtn">✓ Check</button><span id="fb" style="margin-left:10px;font-weight:700"></span><div id="opts"></div></div>
+<div class="wrap">
+<svg id="svg" viewBox="0 0 440 440"></svg>
+<div class="info"><div class="digital" id="dig"></div><div class="d24" id="d24"></div><div class="words" id="words"></div></div>
+</div>
+<div class="hint">Drag the long blue minute hand and the short red hour hand moves with it, just like a real clock. You can also drag the hour hand. "Step" sets how far the hands jump.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),C=220,R=200;
+let t=3*60,step=15,dig=true,h24=false,words=true,mins=false,halves=false,drag=null,task=null;
+const NUMW=['twelve','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve'];
+function hm(){const m=((t%1440)+1440)%1440;return [Math.floor(m/60),m%60];}
+function wordsFor(h,m){
+  const h12=h%12||12,next=(h+1)%12||12;
+  if(m===0)return h===12?`12 o'clock (noon)`:h===0?`12 o'clock (midnight)`:`${h12} o'clock`;if(m===30)return `half past ${h12}`;if(m===15)return `quarter past ${h12}`;if(m===45)return `quarter to ${next}`;
+  return m<30?`${m} minute${m>1?'s':''} past ${h12}`:`${60-m} minute${60-m>1?'s':''} to ${next}`;
+}
+function fmt12(h,m){return `${h%12||12}:${String(m).padStart(2,'0')}`;}
+function render(){
+  svg.innerHTML='';const [h,m]=hm();
+  el('circle',{cx:C,cy:C,r:R+12,fill:'#1e3a8a'},svg);el('circle',{cx:C,cy:C,r:R,fill:'#fff'},svg);
+  if(halves){el('path',{d:`M${C} ${C-R}A${R} ${R} 0 0 1 ${C} ${C+R}Z`,fill:'#dbeafe'},svg);el('path',{d:`M${C} ${C+R}A${R} ${R} 0 0 1 ${C} ${C-R}Z`,fill:'#fee2e2'},svg);txt(svg,C+R*0.3,C+R*0.38,'past',20,'#1d4ed8','700');txt(svg,C-R*0.3,C+R*0.38,'to',20,'#b91c1c','700');}
+  for(let i=0;i<60;i++){const a=i*6*Math.PI/180,l=i%5?8:18;el('line',{x1:C+(R-4)*Math.sin(a),y1:C-(R-4)*Math.cos(a),x2:C+(R-4-l)*Math.sin(a),y2:C-(R-4-l)*Math.cos(a),stroke:'#1f2937','stroke-width':i%5?2:4},svg);}
+  for(let i=1;i<=12;i++){const a=i*30*Math.PI/180;txt(svg,C+(R-48)*Math.sin(a),C-(R-48)*Math.cos(a)+13,String(i),36,'#111827','800');
+    if(mins){const r2=R+30;}}
+  if(mins)for(let i=0;i<12;i++){const a=i*30*Math.PI/180;txt(svg,C+(R-82)*Math.sin(a),C-(R-82)*Math.cos(a)+6,String(i*5).padStart(2,'0'),15,'#2563eb','700');}
+  const ma=m*6,ha=(h%12)*30+m*0.5;
+  const hand=(ang,len,w,col,kind)=>{const a=ang*Math.PI/180,x=C+len*Math.sin(a),y=C-len*Math.cos(a);
+    el('line',{x1:C-18*Math.sin(a),y1:C+18*Math.cos(a),x2:x,y2:y,stroke:col,'stroke-width':w,'stroke-linecap':'round',style:'cursor:grab'},svg);
+    const hit=el('circle',{cx:x,cy:y,r:22,fill:col,'fill-opacity':.2,style:'cursor:grab'},svg);
+    hit.addEventListener('pointerdown',e=>{drag=kind;svg.setPointerCapture(e.pointerId);e.preventDefault();});};
+  hand(ha,R*0.52,12,'#dc2626','h');hand(ma,R*0.82,8,'#2563eb','m');
+  el('circle',{cx:C,cy:C,r:10,fill:'#111827'},svg);
+  const ap=h<12?'am':'pm',special=m===0&&h===12?'12 noon':m===0&&h===0?'12 midnight':null;
+  $('dig').style.display=dig?'':'none';$('dig').textContent=task&&task.type==='read'&&!task.done?'?':(special||`${fmt12(h,m)} ${ap}`);
+  $('d24').textContent=h24&&!(task&&task.type==='read'&&!task.done)?`24-hour time: ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`:'';
+  $('words').textContent=words&&!(task&&task.type==='read'&&!task.done)?wordsFor(h,m):'';
+  $('ampm').textContent=h<12?'☀️ am':'🌙 pm';
+}
+svg.addEventListener('pointermove',e=>{
+  if(!drag)return;const p=pt(svg,e),ang=(Math.atan2(p.x-C,-(p.y-C))*180/Math.PI+360)%360;const [h,m]=hm();
+  if(drag==='m'){let nm=Math.round(ang/6/step)*step%60,base=h*60;
+    if(m>=45&&nm<15)base+=60;else if(m<15&&nm>=45)base-=60;t=((base+nm)%1440+1440)%1440;}
+  else{const tot=Math.round(ang/0.5/step)*step%720,half=h>=12?720:0;t=half+tot;}
+  if(task&&task.type==='set')$('fb').textContent='';
+  render();
+});
+svg.addEventListener('pointerup',()=>{drag=null;});
+document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{step=+b.dataset.s;document.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('on',x===b));t=Math.round(t/step)*step%1440;render();});
+$('ampm').onclick=()=>{t=(t+720)%1440;render();};
+const tog=(id,fn)=>$(id).onclick=e=>{fn();e.target.classList.toggle('on');render();};
+tog('digBtn',()=>dig=!dig);tog('h24Btn',()=>h24=!h24);tog('wordBtn',()=>words=!words);tog('minBtn',()=>mins=!mins);tog('halfBtn',()=>halves=!halves);
+function randTime(){return (Math.floor(Math.random()*(1440/step))*step);}
+$('setBtn').onclick=()=>{
+  let target;do{target=randTime();}while(target%720===t%720);
+  task={type:'set',target};const h=Math.floor(target/60),m=target%60;
+  $('task').style.display='block';$('checkBtn').style.display='';$('opts').innerHTML='';$('fb').textContent='';
+  $('taskText').innerHTML=`Make the clock show <b>${words?wordsFor(h,m):fmt12(h,m)}</b>`+(h24?` (<b>${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}</b>)`:'');render();
+};
+$('checkBtn').onclick=()=>{if(!task||task.type!=='set')return;const ok=t%720===task.target%720;$('fb').textContent=ok?'✓ Well done!':'✗ Not yet. Check the hour hand and the minute hand.';$('fb').style.color=ok?'#15803d':'#b91c1c';};
+$('readBtn').onclick=()=>{
+  t=randTime();task={type:'read',target:t,done:false};
+  $('task').style.display='block';$('checkBtn').style.display='none';$('fb').textContent='';$('taskText').innerHTML='What time is the clock showing?';
+  const set=new Set([t%720]);while(set.size<4){const d=[60,-60,step,-step,30,180][Math.floor(Math.random()*6)];set.add(((t+d)%720+720)%720);}
+  const O=$('opts');O.innerHTML='';[...set].sort(()=>Math.random()-.5).forEach(v=>{const b=document.createElement('button');const h=Math.floor(v/60),m=v%60;b.textContent=words?wordsFor(h,m):fmt12(h,m);
+    b.onclick=()=>{if(v===t%720){task.done=true;$('fb').textContent='✓ Correct!';$('fb').style.color='#15803d';render();}else{b.disabled=true;b.style.opacity=.35;$('fb').textContent='Try again. Look at where the hour hand is pointing.';$('fb').style.color='#b91c1c';}};O.appendChild(b);});
+  render();
+};
+render();
+</script></body></html>

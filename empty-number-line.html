@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Empty Number Line</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,input{font:inherit;font-size:15px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+button.j{font-weight:700;min-width:54px}
+button.b{color:#b91c1c}
+input{width:92px;text-align:center}
+#sum{font-size:20px;padding:8px 14px;min-height:44px;line-height:1.5}
+svg{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Empty Number Line</span>
+<button data-m="num" class="on">Numbers</button><button data-m="time">Time (elapsed)</button>
+<label>Start <input id="start" value="673"></label>
+<label>Finish (optional) <input id="target" value="8000"></label>
+<button id="setBtn">Set</button>
+<button id="undoBtn">↶ Undo</button><button id="clearBtn">Clear jumps</button>
+</div>
+<div class="bar" id="numJumps">
+<span>Jump:</span>
+<button class="j" data-j="1">+1</button><button class="j" data-j="2">+2</button><button class="j" data-j="5">+5</button><button class="j" data-j="10">+10</button><button class="j" data-j="20">+20</button><button class="j" data-j="100">+100</button><button class="j" data-j="1000">+1000</button>
+<button class="j b" data-j="-1">−1</button><button class="j b" data-j="-10">−10</button><button class="j b" data-j="-100">−100</button>
+<button data-next="10">to next 10</button><button data-next="100">to next 100</button><button data-next="1000">to next 1000</button>
+<span>or <input id="custom" placeholder="e.g. 300 or -30" style="width:130px"> <button id="customBtn">Jump</button></span>
+</div>
+<div class="bar" id="timeJumps" style="display:none">
+<span>Jump:</span>
+<button class="j" data-t="5">+5 min</button><button class="j" data-t="10">+10 min</button><button class="j" data-t="15">+15 min</button><button class="j" data-t="30">+30 min</button><button class="j" data-t="60">+1 hour</button>
+<button data-tnext="1">to the next hour</button>
+<span>or <input id="customT" placeholder="minutes" style="width:100px"> <button id="customTBtn">Jump</button></span>
+</div>
+<svg id="svg" viewBox="0 0 1000 300"></svg>
+<div id="sum"></div>
+<div class="hint">An empty number line isn't drawn to scale, so the jumps show your thinking. Counting up to a friendly number first (the next 10, 100 or 1000) is often the quickest way to subtract or find a difference. In Time mode, jump to the next hour, then whole hours, then the minutes left over.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+let mode='num',start=673,target=8000,jumps=[];
+const g3=n=>{const s=String(Math.abs(n));const t=s.length>4?s.replace(/\B(?=(\d{3})+(?!\d))/g,' '):s;return (n<0?'−':'')+t;};
+function fmtT(m){m=((m%1440)+1440)%1440;const h=Math.floor(m/60),mm=m%60;if(m===720)return '12 noon';if(m===0)return '12 midnight';return `${h%12||12}:${String(mm).padStart(2,'0')} ${h<12?'am':'pm'}`;}
+function fmt(v){return mode==='time'?fmtT(v):g3(v);}
+function fmtJ(d){if(mode==='time'){const a=Math.abs(d),h=Math.floor(a/60),m=a%60;return (d<0?'−':'+')+(h?h+' h':'')+(h&&m?' ':'')+(m||!h?m+' min':'');}return (d<0?'−':'+')+g3(Math.abs(d)).replace('−','');}
+function parseT(s){const m=String(s).trim().toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);if(!m)return null;let h=+m[1],mm=+(m[2]||0);if(m[3]==='pm'&&h<12)h+=12;if(m[3]==='am'&&h===12)h=0;if(h>23||mm>59)return null;return h*60+mm;}
+function parseV(s){if(mode==='time')return parseT(s);const v=String(s).replace(/[\s,]/g,'');return v===''||isNaN(+v)?null:Math.round(+v);}
+function widthOf(d){const a=Math.abs(d);return mode==='time'?(a>=60?90+40*Math.log10(a/60+1)*3:40+a*2):40+42*Math.log10(a+1);}
+function render(){
+  svg.innerHTML='';
+  const vals=[start];jumps.forEach(d=>vals.push(vals[vals.length-1]+d));
+  // x positions: cumulative unscaled widths, then fit to the screen
+  let xs=[0];jumps.forEach(d=>xs.push(xs[xs.length-1]+Math.sign(d)*widthOf(d)));
+  const hasT=target!==null&&target!==undefined;
+  let lo=Math.min(...xs),hi=Math.max(...xs);
+  const reached=hasT&&vals[vals.length-1]===target;
+  if(hasT&&!reached)hi=Math.max(hi,xs[xs.length-1]+(target>vals[vals.length-1]?160:0)),lo=Math.min(lo,xs[xs.length-1]-(target<vals[vals.length-1]?160:0));
+  const span=Math.max(hi-lo,1),sc=Math.min(1.6,860/span),X=x=>70+(x-lo)*sc+(860-span*sc)/2*(span*sc<860?1:0),LY=190;
+  el('line',{x1:30,x2:970,y1:LY,y2:LY,stroke:'#1f2937','stroke-width':3},svg);
+  jumps.forEach((d,i)=>{
+    const x1=X(xs[i]),x2=X(xs[i+1]),fw=d>0,h=Math.min(95,22+Math.abs(x2-x1)*0.32),mx=(x1+x2)/2,y0=fw?LY-6:LY+6,cy=fw?y0-2*h:y0+2*h,col=fw?'#16a34a':'#dc2626';
+    el('path',{d:`M${x1} ${y0} Q${mx} ${cy} ${x2} ${y0}`,fill:'none',stroke:col,'stroke-width':3},svg);
+    const ang=Math.atan2(y0-cy,x2-mx),s=11;el('polygon',{points:`${x2},${y0} ${x2-s*Math.cos(ang-0.45)},${y0-s*Math.sin(ang-0.45)} ${x2-s*Math.cos(ang+0.45)},${y0-s*Math.sin(ang+0.45)}`,fill:col},svg);
+    txt(svg,mx,fw?y0-h-10:y0+h+22,fmtJ(d),16,col,'800');
+  });
+  const seen=new Set();
+  vals.forEach((v,i)=>{const x=X(xs[i]);el('line',{x1:x,x2:x,y1:LY-12,y2:LY+12,stroke:'#1f2937','stroke-width':2.5},svg);
+    const key=Math.round(x);if(seen.has(key))return;seen.add(key);
+    const below=jumps.length&&jumps[Math.max(0,i-1)]<0;txt(svg,x,below?LY-22:LY+34,fmt(v),i===0?17:15,i===0?'#1d4ed8':'#111827',i===0||(reached&&i===vals.length-1)?'800':'600');});
+  if(hasT&&!reached){const cur=vals[vals.length-1],xt=X(xs[xs.length-1])+(target>cur?150:-150)*sc;
+    el('line',{x1:xt,x2:xt,y1:LY-14,y2:LY+14,stroke:'#7c3aed','stroke-width':3},svg);txt(svg,xt,LY+34,fmt(target),16,'#7c3aed','800');txt(svg,xt,LY-24,'🏁',22);
+    el('line',{x1:X(xs[xs.length-1])+8,x2:xt-8,y1:LY+52,y2:LY+52,stroke:'#c4b5fd','stroke-width':2,'stroke-dasharray':'5 5'},svg);}
+  // summary
+  let s='';
+  if(jumps.length){
+    const tot=jumps.reduce((a,b)=>a+b,0);
+    s=`${fmt(start)} ${jumps.map(d=>fmtJ(d)).join(' ')} = <b>${fmt(start+tot)}</b>`;
+    if(reached){const allUp=jumps.every(d=>d>0);s+=`<br>✓ You reached ${fmt(target)}! `+(mode==='time'?`Time elapsed: <b>${fmtJ(tot).replace('+','')}</b>`:allUp?`The difference between ${g3(start)} and ${g3(target)} is ${jumps.map(d=>g3(d)).join(' + ')} = <b>${g3(tot)}</b>`:`Total change: <b>${fmtJ(tot)}</b>`);}
+    else if(hasT){const left=target-(start+tot);s+=`<br><span style="color:#7c3aed">${mode==='time'?fmtJ(left).replace('+','')+' more':left>0?g3(left)+' more':g3(-left)+' too far'} to reach ${fmt(target)}.</span>`;}
+  } else s=hasT?`Jump from ${fmt(start)} to ${fmt(target)}. Try jumping to a friendly number first.`:`Start at ${fmt(start)} and make some jumps.`;
+  $('sum').innerHTML=s;
+}
+function doJump(d){if(!d)return;jumps.push(d);render();}
+function cur(){return start+jumps.reduce((a,b)=>a+b,0);}
+document.querySelectorAll('[data-j]').forEach(b=>b.onclick=()=>doJump(+b.dataset.j));
+document.querySelectorAll('[data-next]').forEach(b=>b.onclick=()=>{const n=+b.dataset.next,c=cur(),t=Math.floor(c/n)*n+n;doJump(t-c);});
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>doJump(+b.dataset.t));
+document.querySelector('[data-tnext]').onclick=()=>{const c=cur();doJump(60-((c%60)+60)%60);};
+$('customBtn').onclick=()=>{const v=parseV($('custom').value.replace('−','-'));if(v!==null)doJump(v);$('custom').value='';};
+$('customTBtn').onclick=()=>{const v=Math.round(+$('customT').value);if(v)doJump(v);$('customT').value='';};
+$('custom').addEventListener('keydown',e=>{if(e.key==='Enter')$('customBtn').click();});
+$('customTBtn');$('customT').addEventListener('keydown',e=>{if(e.key==='Enter')$('customTBtn').click();});
+$('setBtn').onclick=()=>{const s=parseV($('start').value),t=$('target').value.trim()===''?null:parseV($('target').value);if(s===null){$('sum').textContent=mode==='time'?'Type a start time like 8:40 am':'Type a start number';return;}start=s;target=t;jumps=[];render();};
+['start','target'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter')$('setBtn').click();}));
+$('undoBtn').onclick=()=>{jumps.pop();render();};
+$('clearBtn').onclick=()=>{jumps=[];render();};
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));
+  $('numJumps').style.display=mode==='num'?'flex':'none';$('timeJumps').style.display=mode==='time'?'flex':'none';
+  if(mode==='time'){$('start').value='8:40 am';$('target').value='11:05 am';}else{$('start').value='673';$('target').value='8000';}$('setBtn').click();});
+render();
+</script></body></html>

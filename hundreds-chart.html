@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hundreds Chart</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,select{font:inherit;font-size:15px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.sw{width:30px;height:30px;padding:0;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px #cbd5e1}
+.sw.on{box-shadow:0 0 0 3px #1f2937}
+#say{font-size:20px;padding:8px 14px;min-height:42px}
+#grid{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;padding:10px;max-width:760px;margin:0 auto}
+.c{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:clamp(14px,2.6vw,24px);font-weight:700;border:2px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;user-select:none;position:relative}
+.c.hid{color:transparent;background:#e2e8f0}
+.c input{width:90%;height:70%;font:inherit;font-size:clamp(13px,2.2vw,20px);text-align:center;border:2px solid #f59e0b;border-radius:6px;background:#fffbeb}
+.c.ok input{border-color:#16a34a;background:#dcfce7}
+.c.bad input{border-color:#dc2626;background:#fee2e2}
+.c.sel{outline:4px solid #1f2937}
+.c .tag{position:absolute;top:-2px;right:2px;font-size:11px;color:#1f2937}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Hundreds Chart</span>
+<select id="start"><option value="1">1 to 100</option><option value="0">0 to 99</option><option value="101">101 to 200</option><option value="1-120">1 to 120</option></select>
+<button id="upBtn">Count from the bottom up</button>
+<span>Colour:</span>
+<button class="sw on" data-c="#fca5a5" style="background:#fca5a5"></button><button class="sw" data-c="#93c5fd" style="background:#93c5fd"></button><button class="sw" data-c="#86efac" style="background:#86efac"></button><button class="sw" data-c="#fde047" style="background:#fde047"></button><button class="sw" data-c="#d8b4fe" style="background:#d8b4fe"></button>
+<button id="clearBtn">Clear colours</button>
+<button id="hideBtn">Hide all numbers</button>
+</div>
+<div class="bar">
+<span>Skip count by:</span><button data-s="2">2s</button><button data-s="3">3s</button><button data-s="4">4s</button><button data-s="5">5s</button><button data-s="10">10s</button>
+<button id="nbrBtn">🔍 Neighbours (±1, ±10)</button>
+<button id="primeBtn">Show prime numbers</button>
+<button id="missBtn">❓ Missing numbers</button><button id="checkBtn" style="display:none">✓ Check</button>
+</div>
+<div id="say"></div>
+<div id="grid"></div>
+<div class="hint">Tap squares to colour them. Skip counting colours every 2nd, 3rd, 4th (and so on) number. Neighbours mode shows the numbers 1 and 10 away from the square you tap. "Hide all numbers" lets you tap a square to peek.</div>
+<script>
+const $=id=>document.getElementById(id);
+let cnt=100,up=false,start=1,colour='#fca5a5',paint={},hideAll=false,peek=new Set(),mode='paint',miss=null,sel=null;
+function nums(){const a=Array.from({length:cnt},(_,i)=>start+i);if(!up)return a;const rows=[];for(let i=0;i<a.length;i+=10)rows.push(a.slice(i,i+10));return rows.reverse().flat();}
+function render(){
+  const G=$('grid');G.innerHTML='';
+  nums().forEach(n=>{
+    const d=document.createElement('div');d.className='c';
+    if(miss&&miss.has(n)){
+      const inp=document.createElement('input');inp.inputMode='numeric';inp.dataset.n=n;inp.value=miss.get(n).v;
+      if(miss.get(n).st)d.classList.add(miss.get(n).st);
+      inp.oninput=()=>{miss.get(n).v=inp.value;miss.get(n).st='';d.classList.remove('ok','bad');};
+      d.appendChild(inp);
+    } else {
+      d.textContent=n;
+      if(hideAll&&!peek.has(n))d.classList.add('hid');
+      if(paint[n])d.style.background=paint[n];
+      if(sel!==null){const diff=n-sel;const lab={'-1':'−1','1':'+1','-10':'−10','10':'+10','0':''}[diff];
+        if(n===sel)d.classList.add('sel');
+        else if(lab!==undefined&&(Math.abs(diff)===10||Math.floor((n-start)/10)===Math.floor((sel-start)/10))){d.style.background='#fde68a';const t=document.createElement('span');t.className='tag';t.textContent=lab;d.appendChild(t);}}
+      d.onclick=()=>tap(n);
+    }
+    G.appendChild(d);
+  });
+}
+function say(s){$('say').innerHTML=s;}
+function tap(n){
+  if(hideAll){peek.has(n)?peek.delete(n):peek.add(n);render();return;}
+  if(mode==='nbr'){sel=n;const r=[];if((n-start)%10)r.push(`${n-1} is 1 less`);if((n-start)%10!==9)r.push(`${n+1} is 1 more`);if(n-10>=start)r.push(`${n-10} is 10 less`);if(n+10<start+cnt)r.push(`${n+10} is 10 more`);say(`<b>${n}</b>: `+r.join(', ')+'.');render();return;}
+  paint[n]=paint[n]===colour?undefined:colour;render();
+}
+document.querySelectorAll('.sw').forEach(b=>b.onclick=()=>{colour=b.dataset.c;document.querySelectorAll('.sw').forEach(x=>x.classList.toggle('on',x===b));if(mode!=='paint'){mode='paint';sel=null;$('nbrBtn').classList.remove('on');render();}});
+$('clearBtn').onclick=()=>{paint={};say('');render();};
+$('hideBtn').onclick=e=>{hideAll=!hideAll;peek.clear();e.target.classList.toggle('on',hideAll);say(hideAll?'Tap a square to peek at its number.':'');render();};
+document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{
+  const s=+b.dataset.s;paint={};const zero=start===0?0:start===101?100:0;
+  for(const n of nums())if(n!==0&&(n-zero)%s===0)paint[n]=colour;
+  say(`Counting by ${s}s: ${nums().filter(n=>paint[n]).slice(0,8).join(', ')} … What pattern do you see?`);render();});
+$('nbrBtn').onclick=e=>{mode=mode==='nbr'?'paint':'nbr';sel=null;e.target.classList.toggle('on',mode==='nbr');say(mode==='nbr'?'Tap any number to see its neighbours.':'');render();};
+$('start').onchange=e=>{const v=e.target.value;cnt=v==='1-120'?120:100;start=v==='1-120'?1:+v;paint={};peek.clear();sel=null;miss=null;$('checkBtn').style.display='none';say('');render();};
+$('missBtn').onclick=()=>{
+  hideAll=false;$('hideBtn').classList.remove('on');sel=null;mode='paint';$('nbrBtn').classList.remove('on');
+  miss=new Map();const all=nums();while(miss.size<8){const n=all[Math.floor(Math.random()*all.length)];miss.set(n,{v:'',st:''});}
+  $('checkBtn').style.display='';say('Type the missing numbers, then press ✓ Check.');render();
+};
+$('checkBtn').onclick=()=>{
+  let ok=0;miss.forEach((m,n)=>{m.st=m.v===''?'':(+m.v===n?'ok':'bad');if(m.st==='ok')ok++;});
+  say(ok===miss.size?'🎉 All correct!':`${ok} of ${miss.size} correct. Look at the numbers around each gap.`);render();
+  if(ok===miss.size){setTimeout(()=>{miss=null;$('checkBtn').style.display='none';render();},1800);}
+};
+$('upBtn').onclick=e=>{up=!up;e.target.classList.toggle('on',up);render();};
+$('primeBtn').onclick=()=>{paint={};const isP=n=>{if(n<2)return false;for(let d=2;d*d<=n;d++)if(n%d===0)return false;return true;};const ps=nums().filter(isP);ps.forEach(n=>paint[n]='#86efac');
+  say(`The <b>${ps.length} prime numbers</b> here are coloured green. A prime number has exactly 2 factors: 1 and itself.`);render();};
+render();
+</script></body></html>

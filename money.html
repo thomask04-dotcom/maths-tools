@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Money</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#total{margin-left:auto;font-size:26px;font-weight:800;padding:2px 14px;background:#fff;border:2px solid #e5e7eb;border-radius:10px}
+#task{font-size:22px;padding:8px 14px;min-height:46px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Money</span>
+<button id="freeBtn" class="on">Free play</button>
+<button id="makeBtn">🎯 Make an amount</button>
+<button id="changeBtn">🧾 Give change</button>
+<button id="checkBtn" style="display:none">✓ Check</button>
+<button id="tidyBtn">Tidy up</button>
+<button id="clearBtn">Clear</button>
+<button id="totBtn" class="on">Show total</button>
+<span id="total">$0.00</span>
+</div>
+<div id="task"></div>
+<svg id="svg" viewBox="0 0 1000 600"></svg>
+<div class="hint">Drag coins and notes from the left onto the mat, and drag them back to the left to put them away. These are simple pictures, not exact copies of real Australian money, but the sizes and colours are similar to help students recognise each one.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),PAL=250;
+const SILVER=['#e5e7eb','#9ca3af'],GOLD=['#fde68a','#ca8a04'];
+const TYPES=[
+ {v:5,label:'5c',coin:1,r:22,c:SILVER},{v:10,label:'10c',coin:1,r:27,c:SILVER},{v:20,label:'20c',coin:1,r:32,c:SILVER},{v:50,label:'50c',coin:1,r:34,c:SILVER,poly:12},
+ {v:100,label:'$1',coin:1,r:28,c:GOLD},{v:200,label:'$2',coin:1,r:23,c:GOLD},
+ {v:500,label:'$5',w:118,h:60,c:['#f5d0fe','#a21caf']},{v:1000,label:'$10',w:124,h:62,c:['#bfdbfe','#1d4ed8']},{v:2000,label:'$20',w:130,h:64,c:['#fecaca','#b91c1c']},
+ {v:5000,label:'$50',w:136,h:66,c:['#fef08a','#a16207']},{v:10000,label:'$100',w:142,h:68,c:['#bbf7d0','#15803d']}];
+const PPOS=[[40,50],[105,50],[180,50],[60,130],[140,130],[205,130],[125,215],[125,290],[125,365],[125,440],[125,515]];
+let items=[],uid=0,drag=null,task=null,showTot=true;
+function money(c){return '$'+(c/100).toFixed(2);}
+function drawItem(p,t,x,y,scale){
+  const g=el('g',{transform:`translate(${x} ${y}) scale(${scale||1})`,style:'cursor:grab'},p);
+  if(t.coin){
+    if(t.poly){let s='';for(let i=0;i<12;i++){const a=i*Math.PI/6;s+=`${t.r*Math.cos(a)},${t.r*Math.sin(a)} `;}el('polygon',{points:s,fill:t.c[0],stroke:t.c[1],'stroke-width':3},g);}
+    else el('circle',{r:t.r,fill:t.c[0],stroke:t.c[1],'stroke-width':3},g);
+    el('circle',{r:t.r-6,fill:'none',stroke:t.c[1],'stroke-width':1,'stroke-dasharray':'2 2'},g);
+    txt(g,0,t.r>25?7:6,t.label,t.r>25?19:15,'#1f2937','800');
+  } else {
+    el('rect',{x:-t.w/2,y:-t.h/2,width:t.w,height:t.h,rx:6,fill:t.c[0],stroke:t.c[1],'stroke-width':3},g);
+    el('rect',{x:-t.w/2+8,y:-t.h/2+8,width:28,height:t.h-16,rx:4,fill:'#fff',opacity:.6},g);
+    txt(g,12,9,t.label,24,t.c[1],'800');
+  }
+  return g;
+}
+function render(){
+  svg.innerHTML='';
+  el('rect',{x:PAL,y:0,width:1000-PAL,height:600,fill:'#ecfdf5'},svg);
+  el('rect',{x:0,y:0,width:PAL,height:600,fill:'#f1f5f9'},svg);
+  txt(svg,PAL+(1000-PAL)/2,588,'Money mat',16,'#6b7280');
+  TYPES.forEach((t,i)=>{const [x,y]=PPOS[i],g=drawItem(svg,t,x,y);g.addEventListener('pointerdown',e=>{const it={id:++uid,t,x,y};items.push(it);start(it,e);});});
+  for(const it of items){const g=drawItem(svg,it.t,it.x,it.y);g.addEventListener('pointerdown',e=>start(it,e));}
+  const tot=items.reduce((s,i)=>s+i.t.v,0);$('total').textContent=showTot?money(tot):'$?';
+}
+function start(it,e){const p=pt(svg,e);items=items.filter(q=>q!==it);items.push(it);drag={it,dx:p.x-it.x,dy:p.y-it.y};svg.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();render();}
+svg.addEventListener('pointermove',e=>{if(!drag)return;const p=pt(svg,e);drag.it.x=Math.max(20,Math.min(980,p.x-drag.dx));drag.it.y=Math.max(20,Math.min(580,p.y-drag.dy));render();});
+svg.addEventListener('pointerup',()=>{if(!drag)return;if(drag.it.x<PAL)items=items.filter(q=>q!==drag.it);drag=null;render();});
+function tidy(){const sorted=items.slice().sort((a,b)=>b.t.v-a.t.v);let x=PAL+30,y=50,rowH=0;for(const it of sorted){const w=it.t.coin?it.t.r*2+10:it.t.w+12,h=it.t.coin?it.t.r*2+10:it.t.h+12;if(x+w>990){x=PAL+30;y+=rowH+8;rowH=0;}it.x=x+w/2;it.y=y+h/2-20;x+=w;rowH=Math.max(rowH,h);}items=sorted;render();}
+function setMode(m){['freeBtn','makeBtn','changeBtn'].forEach(id=>$(id).classList.toggle('on',id===m));$('checkBtn').style.display=m==='freeBtn'?'none':'';}
+$('freeBtn').onclick=()=>{task=null;setMode('freeBtn');$('task').innerHTML='';};
+$('makeBtn').onclick=()=>{
+  const amt=[5*Math.ceil(Math.random()*20),100+5*Math.floor(Math.random()*80),500+5*Math.floor(Math.random()*400),1000+50*Math.floor(Math.random()*80)][Math.floor(Math.random()*4)];
+  task={type:'make',want:amt};items=[];setMode('makeBtn');$('task').innerHTML=`Make <b>${money(amt)}</b>. Can you use the fewest coins and notes?`;render();
+};
+$('changeBtn').onclick=()=>{
+  const notes=[500,1000,2000,5000],paid=notes[Math.floor(Math.random()*4)],price=5*(1+Math.floor(Math.random()*(paid/5-1)));
+  task={type:'change',want:paid-price,price,paid};items=[];setMode('changeBtn');
+  $('task').innerHTML=`Something costs <b>${money(price)}</b>. The customer pays with a <b>${money(paid).replace('.00','')}</b> note. Put their change on the mat.`;render();
+};
+$('checkBtn').onclick=()=>{
+  if(!task)return;const tot=items.reduce((s,i)=>s+i.t.v,0),n=items.length;
+  const fewest=(()=>{let r=task.want,c=0;for(const t of TYPES.slice().reverse()){c+=Math.floor(r/t.v);r%=t.v;}return c;})();
+  let s;
+  if(tot===task.want)s=`✓ Correct! That's ${money(tot)}`+(n>fewest?`. Could you do it with fewer? (It can be done with ${fewest}.)`:n===fewest?`, and you used the fewest possible (${n})! 🌟`:'.');
+  else s=`You have ${money(tot)}. That's ${tot>task.want?'too much':'not enough'}. You need ${money(task.want)}.`+(task.type==='change'?' Try counting up from the price.':'');
+  $('task').innerHTML=$('task').innerHTML.split('<br>')[0]+'<br>'+s;
+};
+$('tidyBtn').onclick=tidy;
+$('clearBtn').onclick=()=>{items=[];render();};
+$('totBtn').onclick=e=>{showTot=!showTot;e.target.classList.toggle('on',showTot);render();};
+render();
+</script></body></html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pattern Blocks</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc}
+.title{font-weight:700;margin-right:6px}
+button{font:inherit;font-size:14px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Pattern Blocks</span>
+<button id="rotL">↺ Rotate</button>
+<button id="rotR">↻ Rotate</button>
+<button id="dupBtn">Duplicate</button>
+<button id="delBtn">Delete</button>
+<button id="clearBtn">Clear</button>
+<button id="fracBtn">Hexagon = 1 whole</button>
+</div>
+<svg id="svg" viewBox="0 0 1000 560"></svg>
+<div class="hint">Drag shapes onto the board. Corners snap together. Double-tap a shape to rotate it 30°. Drag a shape back to the left to remove it. Turn on "Hexagon = 1 whole" to see each block as a fraction.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','pointer-events':'none'},p);t.textContent=s;return t;}
+function frac(p,x,yMid,f,fs,fill){
+  fill=fill||'#1f2937';
+  if(f.t!==undefined){txt(p,x,yMid+fs*0.35,f.t,fs,fill);return;}
+  const cw=fs*0.6,fw=cw*Math.max(String(f.n).length,String(f.d).length)+4;
+  txt(p,x,yMid-fs*0.2,f.n,fs*0.85,fill);
+  el('line',{x1:x-fw/2,x2:x+fw/2,y1:yMid,y2:yMid,stroke:fill,'stroke-width':1.4,'pointer-events':'none'},p);
+  txt(p,x,yMid+fs*0.85,f.d,fs*0.85,fill);
+}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+
+const svg=document.getElementById('svg');
+const S=46,PAL=160,VW=1000,VH=560,r3=Math.sqrt(3),c30=Math.cos(Math.PI/6);
+function centred(v){const cx=v.reduce((a,p)=>a+p[0],0)/v.length,cy=v.reduce((a,p)=>a+p[1],0)/v.length;return v.map(p=>[p[0]-cx,p[1]-cy]);}
+const SH={
+  hex:{c:'#facc15',f:{t:'1'},v:centred([0,60,120,180,240,300].map(a=>[S*Math.cos(a*Math.PI/180),S*Math.sin(a*Math.PI/180)]))},
+  trap:{c:'#ef4444',f:{n:1,d:2},v:centred([[0,0],[2*S,0],[1.5*S,-S*r3/2],[0.5*S,-S*r3/2]])},
+  rhom:{c:'#3b82f6',f:{n:1,d:3},v:centred([[0,0],[S,0],[1.5*S,-S*r3/2],[0.5*S,-S*r3/2]])},
+  tri:{c:'#22c55e',f:{n:1,d:6},v:centred([[0,0],[S,0],[S/2,-S*r3/2]])},
+  sq:{c:'#f97316',v:centred([[0,0],[S,0],[S,-S],[0,-S]])},
+  thin:{c:'#d6b98c',v:centred([[0,0],[S,0],[S+S*c30,-S/2],[S*c30,-S/2]])}
+};
+const TEMPL=[{k:'hex',x:80,y:66},{k:'trap',x:80,y:160},{k:'rhom',x:80,y:228},{k:'tri',x:80,y:296},{k:'sq',x:80,y:366},{k:'thin',x:80,y:432}];
+let pieces=[],uid=0,sel=null,drag=null,lastTap={id:null,t:0},showFrac=false;
+function world(p){const a=p.a*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return SH[p.k].v.map(([x,y])=>[p.x+x*c-y*s,p.y+x*s+y*c]);}
+function drawPiece(p,isSel){
+  const g=el('g',{style:'cursor:grab'},svg);
+  el('polygon',{points:world(p).map(v=>v.join(',')).join(' '),fill:SH[p.k].c,stroke:isSel?'#1d4ed8':'#334155','stroke-width':isSel?3.5:1.5,'stroke-linejoin':'round'},g);
+  if(showFrac&&SH[p.k].f)frac(g,p.x,p.y,SH[p.k].f,17,'#1f2937');
+  return g;
+}
+function render(){
+  svg.innerHTML='';
+  const bg=el('rect',{x:PAL,y:0,width:VW-PAL,height:VH,fill:'#fff'},svg);
+  bg.addEventListener('pointerdown',()=>{sel=null;render();});
+  el('rect',{x:0,y:0,width:PAL,height:VH,fill:'#f1f5f9'},svg);
+  el('line',{x1:PAL,x2:PAL,y1:0,y2:VH,stroke:'#cbd5e1'},svg);
+  for(const tp of TEMPL){const g=drawPiece({...tp,a:0},false);g.addEventListener('pointerdown',e=>spawn(tp,e));}
+  el('rect',{x:12,y:475,width:136,height:74,rx:10,fill:'#fff',stroke:'#94a3b8','stroke-dasharray':'6 5'},svg);
+  txt(svg,80,506,'🗑',20,'#64748b');txt(svg,80,532,'Drop to remove',12,'#64748b');
+  for(const p of pieces){const g=drawPiece(p,p.id===sel);g.addEventListener('pointerdown',e=>startDrag(p,e,false));}
+}
+function spawn(tp,e){const p={id:++uid,k:tp.k,x:tp.x,y:tp.y,a:0};pieces.push(p);startDrag(p,e,true);}
+function startDrag(p,e,isNew){
+  const q=pt(svg,e);pieces=pieces.filter(x=>x!==p);pieces.push(p);
+  drag={p,dx:q.x-p.x,dy:q.y-p.y,sx:q.x,sy:q.y,moved:isNew};sel=p.id;
+  svg.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();render();
+}
+svg.addEventListener('pointermove',e=>{
+  if(!drag)return;const q=pt(svg,e);if(Math.hypot(q.x-drag.sx,q.y-drag.sy)>3)drag.moved=true;
+  drag.p.x=Math.max(0,Math.min(VW,q.x-drag.dx));drag.p.y=Math.max(0,Math.min(VH,q.y-drag.dy));render();
+});
+svg.addEventListener('pointerup',()=>{
+  if(!drag)return;const p=drag.p;
+  if(!drag.moved){const now=Date.now();if(lastTap.id===p.id&&now-lastTap.t<350){p.a=(p.a+30)%360;snap(p);lastTap={id:null,t:0};}else lastTap={id:p.id,t:now};}
+  else if(p.x<PAL){pieces=pieces.filter(x=>x!==p);sel=null;}
+  else snap(p);
+  drag=null;render();
+});
+function snap(p){
+  const mine=world(p);let best=null,bd=14;
+  for(const o of pieces){if(o===p)continue;for(const w of world(o))for(const v of mine){const d=Math.hypot(w[0]-v[0],w[1]-v[1]);if(d<bd){bd=d;best=[w[0]-v[0],w[1]-v[1]];}}}
+  if(best){p.x+=best[0];p.y+=best[1];}
+}
+function selP(){return pieces.find(p=>p.id===sel);}
+function rotate(d){const p=selP();if(p){p.a=(p.a+d+360)%360;render();}}
+document.getElementById('rotL').onclick=()=>rotate(-30);
+document.getElementById('rotR').onclick=()=>rotate(30);
+document.getElementById('dupBtn').onclick=()=>{const p=selP();if(p){const q={...p,id:++uid,x:p.x+30,y:p.y+30};pieces.push(q);sel=q.id;render();}};
+function del(){pieces=pieces.filter(p=>p.id!==sel);sel=null;render();}
+document.getElementById('delBtn').onclick=del;
+document.getElementById('clearBtn').onclick=()=>{pieces=[];sel=null;render();};
+document.getElementById('fracBtn').onclick=e=>{showFrac=!showFrac;e.target.classList.toggle('on',showFrac);render();};
+document.addEventListener('keydown',e=>{if(e.key==='Delete'||e.key==='Backspace')del();else if(e.key==='r'||e.key==='R')rotate(30);});
+render();
+</script></body></html>

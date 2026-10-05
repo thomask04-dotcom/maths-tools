@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Part-Part-Whole</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:16px;padding:8px 14px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#eq{font-size:26px;font-weight:700;padding:10px 14px;min-height:54px}
+#opts{display:flex;flex-wrap:wrap;gap:8px;padding:6px 14px}
+#opts button{font-size:26px;font-weight:800;width:64px;height:64px}
+svg{display:block;width:100%;max-width:900px;margin:0 auto;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Part-Part-Whole</span>
+<span>Whole:</span><button id="wm">−</button><b id="wv" style="font-size:22px;min-width:30px;text-align:center">7</b><button id="wp">+</button>
+<button id="splitBtn">🎲 Split another way</button>
+<button id="eqBtn" class="on">Show number sentences</button>
+<button id="mysBtn">❓ Mystery part</button>
+</div>
+<div id="eq"></div>
+<svg id="svg" viewBox="0 0 900 620"></svg>
+<div id="opts"></div>
+<div class="hint">Drag counters from one part to the other to split the whole a different way. Use − and + to change the whole. Mystery part hides one part, and you work out how many are hiding.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+const WH={x:450,y:160,r:115},PA={x:230,y:425,r:140},PB={x:670,y:425,r:140};
+let whole=7,a=4,showEq=true,mys=null,drag=null;
+function slots(c,n,r){
+  // arrange up to 20 counters in rows of 5 (ten-frame style) inside circle
+  const per=5,rows=Math.ceil(n/per),sp=Math.min(46,(r*1.5)/Math.max(per,1)),out=[];
+  for(let i=0;i<n;i++){const row=Math.floor(i/per),col=i%per,inRow=Math.min(per,n-row*per);out.push([c.x+(col-(inRow-1)/2)*sp,c.y+(row-(rows-1)/2)*sp]);}
+  return out;
+}
+function render(){
+  svg.innerHTML='';
+  el('line',{x1:WH.x,y1:WH.y,x2:PA.x,y2:PA.y,stroke:'#94a3b8','stroke-width':6},svg);
+  el('line',{x1:WH.x,y1:WH.y,x2:PB.x,y2:PB.y,stroke:'#94a3b8','stroke-width':6},svg);
+  const circ=(c,fill,label)=>{el('circle',{cx:c.x,cy:c.y,r:c.r,fill,stroke:'#334155','stroke-width':4},svg);txt(svg,c.x,c.y-c.r-12,label,20,'#475569','700');};
+  circ(WH,'#f1f5f9','Whole');circ(PA,'#fee2e2','Part');circ(PB,'#dbeafe','Part');
+  const cr=whole>10?15:19;
+  slots(WH,whole,WH.r).forEach(([x,y],i)=>el('circle',{cx:x,cy:y,r:cr*0.8,fill:mys?'#7c3aed':i<a?'#ef4444':'#2563eb'},svg));
+  if(mys&&mys.side==='w'){el('circle',{cx:WH.x,cy:WH.y,r:WH.r-6,fill:'#334155'},svg);txt(svg,WH.x,WH.y+22,'?',70,'#fff','800');}
+  const draw=(c,n,col,side)=>{
+    if(mys&&mys.side===side){el('circle',{cx:c.x,cy:c.y,r:c.r-6,fill:'#334155'},svg);txt(svg,c.x,c.y+24,'?',76,'#fff','800');return;}
+    slots(c,n,c.r).forEach(([x,y])=>{const d=el('circle',{cx:x,cy:y,r:cr,fill:col,stroke:'#fff','stroke-width':3,style:'cursor:grab'},svg);d.addEventListener('pointerdown',e=>{if(mys)return;drag={from:side,x,y,col};svg.setPointerCapture(e.pointerId);e.preventDefault();});});
+    txt(svg,c.x,c.y+c.r+40,String(n),34,col,'800');
+  };
+  draw(PA,a,'#ef4444','a');draw(PB,whole-a,'#2563eb','b');
+  if(!mys||mys.side!=='w')txt(svg,WH.x+WH.r+36,WH.y+12,String(whole),34,'#334155','800');
+  if(drag&&drag.px)el('circle',{cx:drag.px,cy:drag.py,r:cr,fill:drag.col,stroke:'#fff','stroke-width':3,opacity:.85,'pointer-events':'none'},svg);
+  const b=whole-a;
+  $('eq').innerHTML=mys?'':showEq?`${a} + ${b} = ${whole} &nbsp;&nbsp; ${b} + ${a} = ${whole} &nbsp;&nbsp; ${whole} − ${a} = ${b} &nbsp;&nbsp; ${whole} − ${b} = ${a}`:'';
+}
+svg.addEventListener('pointermove',e=>{if(!drag)return;const p=pt(svg,e);drag.px=p.x;drag.py=p.y;render();});
+svg.addEventListener('pointerup',e=>{
+  if(!drag)return;const p=pt(svg,e),to=Math.hypot(p.x-PA.x,p.y-PA.y)<PA.r+30?'a':Math.hypot(p.x-PB.x,p.y-PB.y)<PB.r+30?'b':null;
+  if(to&&to!==drag.from){if(to==='b')a--;else a++;}
+  drag=null;render();
+});
+function setWhole(w){whole=Math.max(1,Math.min(20,w));a=Math.min(a,whole);$('wv').textContent=whole;endMys();render();}
+$('wm').onclick=()=>setWhole(whole-1);$('wp').onclick=()=>setWhole(whole+1);
+$('splitBtn').onclick=()=>{let n;do{n=Math.floor(Math.random()*(whole+1));}while(n===a&&whole>0);a=n;endMys();render();};
+$('eqBtn').onclick=e=>{showEq=!showEq;e.target.classList.toggle('on',showEq);render();};
+function endMys(){mys=null;$('opts').innerHTML='';$('mysBtn').classList.remove('on');}
+$('mysBtn').onclick=()=>{
+  a=Math.floor(Math.random()*(whole+1));const side=['a','b','w'][Math.floor(Math.random()*3)];mys={side};$('mysBtn').classList.add('on');
+  const ans=side==='a'?a:side==='b'?whole-a:whole;
+  const O=$('opts');O.innerHTML='<span style="font-size:22px;align-self:center;margin-right:8px">How many are hiding?</span>';
+  for(let k=0;k<=20;k++){if(side!=='w'&&k>whole)break;if(side==='w'&&k<Math.max(a,whole-a))continue;
+    const b=document.createElement('button');b.textContent=k;b.onclick=()=>{
+      if(k===ans){endMys();render();$('eq').innerHTML='✓ Yes! '+$('eq').innerHTML;}
+      else{b.disabled=true;b.style.opacity=.3;}
+    };O.appendChild(b);}
+  render();
+};
+render();
+</script></body></html>

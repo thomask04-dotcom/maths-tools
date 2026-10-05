@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Symmetry & Transformations</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button,select{font:inherit;font-size:15px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.sw{width:30px;height:30px;padding:0;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px #cbd5e1}
+.sw.on{box-shadow:0 0 0 3px #1f2937}
+#say{font-size:20px;padding:8px 14px;min-height:44px}
+#opts{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 8px}
+#opts button{font-size:18px;font-weight:700;padding:8px 16px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Symmetry & Transformations</span>
+<button data-t="mirror" class="on">Mirror drawing</button><button data-t="move">Slide, flip, turn</button><button data-t="lines">Lines of symmetry</button>
+</div>
+<div class="bar" id="ctl"></div>
+<div id="say"></div>
+<div id="opts"></div>
+<svg id="svg" viewBox="0 0 1000 520"></svg>
+<div class="hint">A shape has line symmetry if folding it along a line makes the two halves match exactly. Translating (sliding), reflecting (flipping) and rotating (turning) change a shape's position, but not its size or area.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),U=40;
+let tab='mirror',mir={axis:'v',auto:true,cells:new Map(),col:'#ef4444',target:null,marks:null},mv={cells:[[0,0],[0,1],[0,2],[1,0],[2,0],[1,2]],ox:5,oy:3,ghost:null,words:'s2',quiz:null},ln={shape:'square',show:false,ang:0,anim:null};
+const W=20,H=12,X0=100,Y0=20;
+function say(s){$('say').innerHTML=s;}
+function ctl(){
+  const C=$('ctl');$('opts').innerHTML='';
+  if(tab==='mirror')C.innerHTML='<span>Mirror line:</span><button data-a="v" class="'+(mir.axis==='v'?'on':'')+'">up and down</button><button data-a="h" class="'+(mir.axis==='h'?'on':'')+'">across</button><button id="autoB" class="'+(mir.auto?'on':'')+'">Auto-mirror</button>'+['#ef4444','#3b82f6','#22c55e','#facc15','#a855f7'].map(c=>`<button class="sw ${c===mir.col?'on':''}" data-c="${c}" style="background:${c}"></button>`).join('')+'<button id="chalB">🎯 Finish the picture</button><button id="chkB">✓ Check</button><button id="clrB">Clear</button>';
+  if(tab==='move')C.innerHTML='<button data-mv="L">⬅ slide</button><button data-mv="R">slide ➡</button><button data-mv="U">⬆ slide</button><button data-mv="D">⬇ slide</button><button data-mv="FH">⇆ flip across</button><button data-mv="FV">⇅ flip up/down</button><button data-mv="CW">↻ quarter turn clockwise</button><button data-mv="ACW">↺ quarter turn anti-clockwise</button><button data-mv="HT">half turn</button><button id="resetB">Reset</button><button id="quizB">❓ What happened?</button><select id="wordsSel"><option value="s1">slide / flip / turn</option><option value="s2">translate / reflect / rotate</option></select>';
+  if(tab==='lines')C.innerHTML='<select id="shapeSel">'+Object.keys(SHAPES).map(k=>`<option value="${k}">${SHAPES[k].name}</option>`).join('')+'</select><button id="showB">Show lines of symmetry</button><button id="spinB">↻ Turn it (rotational symmetry)</button><button id="askB">❓ How many lines?</button>';
+  wire();
+}
+function wire(){
+  const C=$('ctl');
+  C.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{mir.axis=b.dataset.a;mir.cells.clear();mir.target=null;mir.marks=null;ctl();render();});
+  C.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{mir.col=b.dataset.c;ctl();});
+  if($('autoB'))$('autoB').onclick=()=>{mir.auto=!mir.auto;ctl();};
+  if($('clrB'))$('clrB').onclick=()=>{mir.cells.clear();mir.target=null;mir.marks=null;render();};
+  if($('chalB'))$('chalB').onclick=()=>{mir.cells.clear();mir.auto=false;mir.marks=null;const t=new Map(),cols=['#ef4444','#3b82f6','#22c55e','#facc15'];
+    for(let i=0;i<12;i++){const x=mir.axis==='v'?Math.floor(Math.random()*(W/2)):Math.floor(Math.random()*W),y=mir.axis==='v'?Math.floor(Math.random()*H):Math.floor(Math.random()*(H/2));t.set(x+','+y,cols[i%4]);}
+    mir.target=t;t.forEach((c,k)=>mir.cells.set(k,c));ctl();render();say('Colour the other side so the picture is symmetrical, then press ✓ Check.');};
+  if($('chkB'))$('chkB').onclick=()=>{let wrong=0,missing=0;const want=new Map();mir.cells.forEach((c,k)=>{const [x,y]=k.split(',').map(Number);if(side(x,y)===0)want.set(refl(x,y).join(','),c);});
+    mir.marks=new Set();want.forEach((c,k)=>{if(mir.cells.get(k)!==c){missing++;mir.marks.add(k);}});mir.cells.forEach((c,k)=>{const [x,y]=k.split(',').map(Number);if(side(x,y)===1&&want.get(k)!==c){wrong++;mir.marks.add(k);}});
+    render();say(wrong+missing?`${missing} square${missing===1?'':'s'} still to colour, and ${wrong} in the wrong place (outlined).`:'🎉 Perfectly symmetrical!');};
+  $('ctl').querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>{mv.quiz=null;$('opts').innerHTML='';mv.ghost=mv.ghost||snap();doMove(b.dataset.mv);render();say(describe(b.dataset.mv));});
+  if($('resetB'))$('resetB').onclick=()=>{mv.cells=[[0,0],[0,1],[0,2],[1,0],[2,0],[1,2]];mv.ox=5;mv.oy=3;mv.ghost=null;mv.quiz=null;$('opts').innerHTML='';render();say('');};
+  if($('wordsSel')){$('wordsSel').value=mv.words;$('wordsSel').onchange=e=>{mv.words=e.target.value;};}
+  if($('quizB'))$('quizB').onclick=quiz;
+  if($('shapeSel')){$('shapeSel').value=ln.shape;$('shapeSel').onchange=e=>{ln.shape=e.target.value;ln.ang=0;$('opts').innerHTML='';render();};}
+  if($('showB'))$('showB').onclick=e=>{ln.show=!ln.show;e.target.classList.toggle('on',ln.show);render();};
+  if($('spinB'))$('spinB').onclick=spin;
+  if($('askB'))$('askB').onclick=()=>{const k=Object.keys(SHAPES)[Math.floor(Math.random()*Object.keys(SHAPES).length)];ln.shape=k;$('shapeSel').value=k;ln.show=false;$('showB').classList.remove('on');render();
+    const O=$('opts');O.innerHTML='';for(let i=0;i<=8;i++){const b=document.createElement('button');b.textContent=i;b.onclick=()=>{const n=SHAPES[k].lines.length;if(i===n){say(`✓ Yes! A ${SHAPES[k].name.toLowerCase()} has ${n} line${n===1?'':'s'} of symmetry.`);ln.show=true;$('showB').classList.add('on');render();O.innerHTML='';}else{b.disabled=true;b.style.opacity=.3;say('Not quite. Imagine folding it. Do the halves match?');}};O.appendChild(b);}
+    say(`How many lines of symmetry does this ${SHAPES[k].name.toLowerCase()} have?`);};
+}
+function side(x,y){return mir.axis==='v'?(x<W/2?0:1):(y<H/2?0:1);}
+function refl(x,y){return mir.axis==='v'?[W-1-x,y]:[x,H-1-y];}
+// ---- slide flip turn
+function snap(){return {cells:mv.cells.map(c=>c.slice()),ox:mv.ox,oy:mv.oy};}
+function doMove(m){
+  if(m==='L')mv.ox--;if(m==='R')mv.ox++;if(m==='U')mv.oy--;if(m==='D')mv.oy++;
+  const maxX=Math.max(...mv.cells.map(c=>c[0])),maxY=Math.max(...mv.cells.map(c=>c[1]));
+  if(m==='FH')mv.cells=mv.cells.map(([x,y])=>[maxX-x,y]);
+  if(m==='FV')mv.cells=mv.cells.map(([x,y])=>[x,maxY-y]);
+  if(m==='CW')mv.cells=mv.cells.map(([x,y])=>[maxY-y,x]);
+  if(m==='ACW')mv.cells=mv.cells.map(([x,y])=>[y,maxX-x]);
+  if(m==='HT')mv.cells=mv.cells.map(([x,y])=>[maxX-x,maxY-y]);
+  const w=Math.max(...mv.cells.map(c=>c[0]))+1,h=Math.max(...mv.cells.map(c=>c[1]))+1;mv.ox=Math.max(0,Math.min(W-w,mv.ox));mv.oy=Math.max(0,Math.min(H-h,mv.oy));
+}
+const WORD={s1:{t:'slide',r:'flip',o:'turn'},s2:{t:'translation',r:'reflection',o:'rotation'}};
+function describe(m){const w=WORD[mv.words];return {L:`${cap(w.t)} 1 square left.`,R:`${cap(w.t)} 1 square right.`,U:`${cap(w.t)} 1 square up.`,D:`${cap(w.t)} 1 square down.`,FH:`${cap(w.r)} across a vertical line. The shape is now a mirror image.`,FV:`${cap(w.r)} across a horizontal line.`,CW:`${cap(w.o)}: a quarter turn clockwise.`,ACW:`${cap(w.o)}: a quarter turn anti-clockwise.`,HT:`${cap(w.o)}: a half turn.`}[m]+' The size and area stay the same.';}
+const cap=s=>s[0].toUpperCase()+s.slice(1);
+function quiz(){
+  mv.cells=[[0,0],[0,1],[0,2],[1,0],[2,0],[1,2]];mv.ox=3+Math.floor(Math.random()*5);mv.oy=2+Math.floor(Math.random()*3);mv.ghost=snap();
+  const kinds=[['t',['L','R','U','D']],['r',['FH','FV']],['o',['CW','ACW','HT']]],[k,ms]=kinds[Math.floor(Math.random()*3)];
+  const m=ms[Math.floor(Math.random()*ms.length)];doMove(m);if(k==='t'){for(let i=0;i<3+Math.floor(Math.random()*4);i++)doMove(m);}else{mv.ox+=6;doMove('L');doMove('R');}
+  mv.quiz=k;render();say('The faded shape moved to where the coloured shape is. What happened?');
+  const O=$('opts');O.innerHTML='';const w=WORD[mv.words];[['t',w.t],['r',w.r],['o',w.o]].forEach(([kk,label])=>{const b=document.createElement('button');b.textContent=cap(label);b.onclick=()=>{if(kk===mv.quiz){say(`✓ Yes, it's a ${label}!`);O.innerHTML='';}else{b.disabled=true;b.style.opacity=.3;say('Not quite. Is it the same way round, a mirror image, or turned?');}};O.appendChild(b);});
+}
+// ---- lines of symmetry
+function reg(n,r,rot){return Array.from({length:n},(_,i)=>{const a=rot+i*2*Math.PI/n;return [r*Math.cos(a),r*Math.sin(a)];});}
+const D2R=Math.PI/180;
+const SHAPES={
+ square:{name:'Square',pts:[[-120,-120],[120,-120],[120,120],[-120,120]],lines:[0,45,90,135],order:4},
+ rectangle:{name:'Rectangle',pts:[[-170,-100],[170,-100],[170,100],[-170,100]],lines:[0,90],order:2},
+ rhombus:{name:'Rhombus',pts:[[0,-150],[100,0],[0,150],[-100,0]],lines:[0,90],order:2},
+ kite:{name:'Kite',pts:[[0,-150],[100,-40],[0,150],[-100,-40]],lines:[90],order:1},
+ para:{name:'Parallelogram',pts:[[-170,90],[90,90],[170,-90],[-90,-90]],lines:[],order:2},
+ trap:{name:'Trapezium (isosceles)',pts:[[-180,90],[180,90],[90,-90],[-90,-90]],lines:[90],order:1},
+ eqtri:{name:'Equilateral triangle',pts:reg(3,150,-Math.PI/2),lines:[90,30,150],order:3},
+ isotri:{name:'Isosceles triangle',pts:[[0,-160],[100,120],[-100,120]],lines:[90],order:1},
+ scatri:{name:'Scalene triangle',pts:[[-150,110],[160,110],[-40,-130]],lines:[],order:1},
+ rtri:{name:'Right-angled isosceles triangle',pts:[[-130,130],[130,130],[-130,-130]],lines:[135],order:1},
+ pent:{name:'Regular pentagon',pts:reg(5,150,-Math.PI/2),lines:[90,18,162,54,126],order:5},
+ hex:{name:'Regular hexagon',pts:reg(6,150,0),lines:[0,30,60,90,120,150],order:6},
+ oct:{name:'Regular octagon',pts:reg(8,150,Math.PI/8),lines:[0,22.5,45,67.5,90,112.5,135,157.5],order:8}};
+function spin(){const S=SHAPES[ln.shape];cancelAnimationFrame(ln.anim);const t0=performance.now(),dur=4000;let matches=0,lastStep=-1;
+  const step=now=>{const k=Math.min(1,(now-t0)/dur);ln.ang=360*k;const stepN=Math.floor(k*S.order+1e-9);render();
+    if(stepN!==lastStep&&k<1){lastStep=stepN;}
+    if(k<1)ln.anim=requestAnimationFrame(step);else{ln.ang=0;render();say(`In one full turn, the ${S.name.toLowerCase()} fits back onto its own outline <b>${S.order}</b> time${S.order>1?'s':''}. `+(S.order>1?`It has rotational symmetry of order ${S.order}.`:'It has no rotational symmetry (order 1).'));}};
+  ln.anim=requestAnimationFrame(step);say('Watch the shape turn. Count how many times it fits exactly onto its outline.');}
+function render(){
+  svg.innerHTML='';
+  if(tab==='mirror'){
+    svg.setAttribute('viewBox','0 0 1000 520');
+    for(let x=0;x<W;x++)for(let y=0;y<H;y++){const k=x+','+y,c=mir.cells.get(k);const r=el('rect',{x:X0+x*U,y:Y0+y*U,width:U,height:U,fill:c||'#fff',stroke:mir.marks&&mir.marks.has(k)?'#dc2626':'#e2e8f0','stroke-width':mir.marks&&mir.marks.has(k)?3:1,style:'cursor:pointer'},svg);
+      r.addEventListener('pointerdown',()=>{mir.marks=null;if(mir.target&&side(x,y)===0)return;if(c===mir.col)mir.cells.delete(k);else mir.cells.set(k,mir.col);
+        if(mir.auto&&!mir.target){const [rx,ry]=refl(x,y),rk=rx+','+ry;if(mir.cells.has(k))mir.cells.set(rk,mir.col);else mir.cells.delete(rk);}render();});}
+    if(mir.axis==='v')el('line',{x1:X0+W/2*U,x2:X0+W/2*U,y1:Y0-10,y2:Y0+H*U+10,stroke:'#111827','stroke-width':4,'stroke-dasharray':'12 6'},svg);
+    else el('line',{x1:X0-10,x2:X0+W*U+10,y1:Y0+H/2*U,y2:Y0+H/2*U,stroke:'#111827','stroke-width':4,'stroke-dasharray':'12 6'},svg);
+    if(!mir.target&&!$('say').innerHTML)say('Colour squares on one side. With Auto-mirror on, you see the reflection straight away.');
+  }
+  if(tab==='move'){
+    svg.setAttribute('viewBox','0 0 1000 520');
+    for(let x=0;x<=W;x++)el('line',{x1:X0+x*U,x2:X0+x*U,y1:Y0,y2:Y0+H*U,stroke:'#e2e8f0'},svg);for(let y=0;y<=H;y++)el('line',{x1:X0,x2:X0+W*U,y1:Y0+y*U,y2:Y0+y*U,stroke:'#e2e8f0'},svg);
+    const drawS=(s,fill,op,dash)=>s.cells.forEach(([x,y])=>el('rect',{x:X0+(s.ox+x)*U+1,y:Y0+(s.oy+y)*U+1,width:U-2,height:U-2,fill,opacity:op,stroke:dash?'#64748b':'#1f2937','stroke-width':2,'stroke-dasharray':dash?'5 4':'none'},svg));
+    if(mv.ghost)drawS(mv.ghost,'#cbd5e1',.6,true);
+    drawS(mv,'#f97316',1,false);
+    // mark a dot on the first cell so orientation is visible
+    const [fx,fy]=mv.cells[0];el('circle',{cx:X0+(mv.ox+fx)*U+U/2,cy:Y0+(mv.oy+fy)*U+U/2,r:7,fill:'#1f2937'},svg);
+    if(mv.ghost){const [gx,gy]=mv.ghost.cells[0];el('circle',{cx:X0+(mv.ghost.ox+gx)*U+U/2,cy:Y0+(mv.ghost.oy+gy)*U+U/2,r:6,fill:'#94a3b8'},svg);}
+  }
+  if(tab==='lines'){
+    svg.setAttribute('viewBox','0 0 1000 440');const S=SHAPES[ln.shape],cx=500,cy=220,a=ln.ang*D2R;
+    if(ln.ang)el('polygon',{points:S.pts.map(([x,y])=>`${cx+x},${cy+y}`).join(' '),fill:'none',stroke:'#94a3b8','stroke-width':3,'stroke-dasharray':'8 6'},svg);
+    el('polygon',{points:S.pts.map(([x,y])=>`${cx+x*Math.cos(a)-y*Math.sin(a)},${cy+x*Math.sin(a)+y*Math.cos(a)}`).join(' '),fill:'#bfdbfe',stroke:'#1e3a8a','stroke-width':4,opacity:.9},svg);
+    if(ln.show&&!ln.ang){S.lines.forEach(d=>{const r=d*D2R,L=210;el('line',{x1:cx-L*Math.cos(r),y1:cy+L*Math.sin(r),x2:cx+L*Math.cos(r),y2:cy-L*Math.sin(r),stroke:'#dc2626','stroke-width':3,'stroke-dasharray':'10 6'},svg);});
+      say(`A ${S.name.toLowerCase()} has <b>${S.lines.length}</b> line${S.lines.length===1?'':'s'} of symmetry`+(S.lines.length?'.':'. There is no fold line where the two halves match.'));}
+    el('circle',{cx,cy,r:5,fill:'#1f2937'},svg);
+  }
+}
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b));say('');ctl();render();});
+ctl();render();
+</script></body></html>

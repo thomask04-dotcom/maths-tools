@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fraction Strips</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:6px 11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#say{font-size:20px;padding:8px 14px;min-height:42px}
+#opts{display:flex;gap:10px;padding:0 14px 8px;flex-wrap:wrap}
+#opts button{font-size:20px;font-weight:700;padding:8px 18px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Fraction Strips</span>
+<button data-t="fold" class="on">Strip & number line</button><button data-t="diy">Fold it yourself</button><button data-t="past">Go past one</button><button data-t="meas">How long is it?</button>
+</div>
+<div class="bar" id="ctl"></div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 380"></svg>
+<div id="opts"></div>
+<div class="hint">A fraction is a length: 1 whole strip is cut into equal parts. Line the strip up with the number line to see where the fraction sits between 0 and 1. The same fraction of a longer whole is a longer piece, but it's still the same distance from 0 to 1 on its own number line.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function frac(p,x,y,n,d,fs,col){txt(p,x,y-fs*0.22,String(n),fs*0.85,col,'800');el('line',{x1:x-fs*0.45,x2:x+fs*0.45,y1:y,y2:y,stroke:col,'stroke-width':2,'pointer-events':'none'},p);txt(p,x,y+fs*0.85,String(d),fs*0.85,col,'800');}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),SH='#f97316';
+const NAME={2:'halves',3:'thirds',4:'quarters',5:'fifths',6:'sixths',8:'eighths',10:'tenths',12:'twelfths'},ONE={2:'half',3:'third',4:'quarter',5:'fifth',6:'sixth',8:'eighth',10:'tenth',12:'twelfth'};
+let tab='fold',n=4,shaded=new Set(),len=700,two=false,diy={n:3,cuts:[0.25,0.6]},drag=null,past={n:4,k:0},meas=null;
+function gcd(a,b){while(b)[a,b]=[b,a%b];return a;}
+function ctl(){
+  const C=$('ctl');let h='';
+  if(tab==='fold'){h='<span>Cut into:</span>'+[2,3,4,5,6,8,10,12].map(d=>`<button data-n="${d}" class="${d===n?'on':''}">${NAME[d]}</button>`).join('')+'<span>Whole:</span><button data-l="440">short</button><button data-l="700" class="on">medium</button><button data-l="860">long</button><button id="twoBtn" class="'+(two?'on':'')+'">Compare with a different whole</button><button id="clr">Clear shading</button>';}
+  if(tab==='diy')h='<span>Try to fold into:</span><button data-dn="3" class="'+(diy.n===3?'on':'')+'">thirds</button><button data-dn="5" class="'+(diy.n===5?'on':'')+'">fifths</button><button data-dn="4" class="'+(diy.n===4?'on':'')+'">quarters</button><button id="hintBtn">Show me</button>';
+  if(tab==='past')h='<span>Pieces:</span>'+[2,3,4,5,8,10].map(d=>`<button data-pn="${d}" class="${d===past.n?'on':''}">${ONE[d]}s</button>`).join('')+'<button id="addP" style="font-weight:700">+ one more</button><button id="subP">− take one</button><button id="clrP">Clear</button>';
+  if(tab==='meas')h='<button id="newM">🎲 New bar to measure</button>';
+  C.innerHTML=h;
+  C.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{n=+b.dataset.n;shaded.clear();ctl();render();});
+  C.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{len=+b.dataset.l;C.querySelectorAll('[data-l]').forEach(x=>x.classList.toggle('on',x===b));render();});
+  if($('twoBtn'))$('twoBtn').onclick=()=>{two=!two;ctl();render();};
+  if($('clr'))$('clr').onclick=()=>{shaded.clear();render();};
+  C.querySelectorAll('[data-dn]').forEach(b=>b.onclick=()=>{diy.n=+b.dataset.dn;diy.cuts=Array.from({length:diy.n-1},(_,i)=>(i+1)/diy.n+(Math.random()-.5)*0.12).sort();ctl();render();});
+  if($('hintBtn'))$('hintBtn').onclick=()=>{diy.cuts=diy.cuts.map((_,i)=>(i+1)/diy.n);render();};
+  C.querySelectorAll('[data-pn]').forEach(b=>b.onclick=()=>{past.n=+b.dataset.pn;past.k=0;ctl();render();});
+  if($('addP'))$('addP').onclick=()=>{if(past.k<3*past.n){past.k++;render();}};
+  if($('subP'))$('subP').onclick=()=>{if(past.k>0){past.k--;render();}};
+  if($('clrP'))$('clrP').onclick=()=>{past.k=0;render();};
+  if($('newM'))$('newM').onclick=newMeas;
+}
+function stripAndLine(x0,y,L,d,interactive,label){
+  for(let i=0;i<d;i++){const w=L/d,on=shaded.has(i),r=el('rect',{x:x0+i*w,y,width:w,height:54,fill:on?SH:'#fff7ed',stroke:'#9a3412','stroke-width':2,style:interactive?'cursor:pointer':''},svg);
+    if(interactive)r.addEventListener('pointerdown',()=>{on?shaded.delete(i):shaded.add(i);render();});
+    if(w>34)frac(svg,x0+i*w+w/2,y+26,1,d,18,on?'#fff':'#9a3412');}
+  const ly=y+100;el('line',{x1:x0-10,x2:x0+L+30,y1:ly,y2:ly,stroke:'#1f2937','stroke-width':2.5},svg);
+  for(let i=0;i<=d;i++){const x=x0+i*L/d;el('line',{x1:x,x2:x,y1:ly-(i%d?9:15),y2:ly+(i%d?9:15),stroke:'#1f2937','stroke-width':i%d?1.5:3},svg);
+    if(i===0||i===d)txt(svg,x,ly+36,String(i/d),20,'#111827','800');else if(L/d>30){const g=gcd(i,d);frac(svg,x,ly+32,i/g,d/g,15,'#374151');}}
+  el('line',{x1:x0,x2:x0,y1:y-8,y2:ly,stroke:'#94a3b8','stroke-dasharray':'4 4'},svg);el('line',{x1:x0+L,x2:x0+L,y1:y-8,y2:ly,stroke:'#94a3b8','stroke-dasharray':'4 4'},svg);
+  const k=shaded.size;if(k){const x=x0+k*L/d;el('circle',{cx:x,cy:ly,r:9,fill:'#dc2626'},svg);}
+  if(label)txt(svg,x0,y-14,label,15,'#64748b','600','start');
+}
+function render(){
+  svg.innerHTML='';$('opts').innerHTML='';let s='';
+  if(tab==='fold'){
+    svg.setAttribute('viewBox',`0 0 1000 ${two?420:230}`);
+    stripAndLine(60,30,len,n,true,two?'Whole A':'');
+    if(two){const L2=len>500?len*0.55:Math.min(900,len*1.8);stripAndLine(60,230,L2,n,true,'Whole B');}
+    const k=shaded.size,g=gcd(k,n);
+    s=`The whole is cut into <b>${n} equal parts</b>, called ${NAME[n]}.`+(k?` Shaded: <b>${k}/${n}</b>`+(g>1&&k<n?` = <b>${k/g}/${n/g}</b>`:'')+(k===n?' = 1 whole':'')+`. It sits at the red dot on the number line.`:' Tap parts to shade them.');
+    if(two&&k)s+=` The piece from B is a different length, but ${k}/${n} is in the same place between 0 and 1 on its own line.`;
+  }
+  if(tab==='diy'){
+    svg.setAttribute('viewBox','0 0 1000 260');const x0=80,L=840,y=60,cuts=[0,...diy.cuts,1];
+    el('rect',{x:x0,y,width:L,height:70,fill:'#fff7ed',stroke:'#9a3412','stroke-width':2.5},svg);
+    const lens=cuts.slice(1).map((c,i)=>c-cuts[i]),ok=lens.every(l=>Math.abs(l-1/diy.n)<0.012);
+    lens.forEach((l,i)=>{const xa=x0+cuts[i]*L,w=l*L;el('rect',{x:xa+2,y:y+2,width:w-4,height:66,fill:['#fed7aa','#fdba74','#fb923c','#f97316','#ea580c'][i%5],opacity:.8},svg);txt(svg,xa+w/2,y+44,Math.round(l*100)+'%',18,'#431407','800');
+      el('line',{x1:xa+4,x2:xa+w-4,y1:y+95,y2:y+95,stroke:ok?'#16a34a':'#dc2626','stroke-width':4},svg);});
+    diy.cuts.forEach((c,i)=>{const x=x0+c*L;el('line',{x1:x,x2:x,y1:y-14,y2:y+84,stroke:'#1f2937','stroke-width':3,'stroke-dasharray':'8 5'},svg);
+      const h=el('polygon',{points:`${x-14},${y-34} ${x+14},${y-34} ${x},${y-12}`,fill:'#2563eb',style:'cursor:ew-resize'},svg);
+      h.addEventListener('pointerdown',e=>{drag={i};svg.setPointerCapture(e.pointerId);e.preventDefault();});});
+    s=ok?`✓ Well done! ${diy.n} equal parts. Each part is <b>1/${diy.n}</b> of the strip.`:`Drag the blue fold marks until all ${diy.n} parts are the same length. Each should be about ${Math.round(100/diy.n)}% of the strip. Fold, check, and refold!`;
+  }
+  if(tab==='past'){
+    const d=past.n,k=past.k,U=280,x0=60,ly=250;svg.setAttribute('viewBox','0 0 1000 330');
+    el('line',{x1:x0-10,x2:x0+3*U+30,y1:ly,y2:ly,stroke:'#1f2937','stroke-width':2.5},svg);
+    for(let i=0;i<=3*d;i++){const x=x0+i*U/d;el('line',{x1:x,x2:x,y1:ly-(i%d?8:15),y2:ly+(i%d?8:15),stroke:'#1f2937','stroke-width':i%d?1.5:3},svg);if(i%d===0)txt(svg,x,ly+40,String(i/d),22,'#111827','800');}
+    for(let i=0;i<k;i++){const x=x0+i*U/d,w=U/d,whole=Math.floor(i/d);el('rect',{x:x+1,y:150,width:w-2,height:60,rx:4,fill:['#fb923c','#60a5fa','#4ade80'][whole],stroke:'#1f2937','stroke-width':1.5},svg);if(w>34)frac(svg,x+w/2,180,1,d,16,'#111827');}
+    for(let w=0;w<Math.floor(k/d);w++){el('rect',{x:x0+w*U-2,y:120,width:U+4,height:94,rx:8,fill:'none',stroke:'#16a34a','stroke-width':3,'stroke-dasharray':'8 5'},svg);txt(svg,x0+w*U+U/2,112,'= 1 whole',17,'#16a34a','800');}
+    if(k)el('circle',{cx:x0+k*U/d,cy:ly,r:9,fill:'#dc2626'},svg);
+    const W=Math.floor(k/d),r=k%d,g=gcd(r,d);
+    s=k?`<b>${k} ${k===1?ONE[d]:ONE[d]+'s'}</b> = <b>${k}/${d}</b>`+(W?` = <b>${W}${r?' and '+(r/g)+'/'+(d/g):''}</b>`+(r?'':` whole${W>1?'s':''}`):'')+`. ${d} ${ONE[d]}s make 1 whole.`:`Press "+ one more" to keep adding ${ONE[d]}s. What happens when you reach 1?`;
+  }
+  if(tab==='meas'){
+    if(!meas)newMeas(true);
+    svg.setAttribute('viewBox','0 0 1000 300');const U=220,x0=60;
+    // pencil unit
+    const pencil=(x,y,w)=>{el('rect',{x,y,width:w-26,height:26,fill:'#facc15',stroke:'#1f2937','stroke-width':2},svg);el('rect',{x,y,width:12,height:26,fill:'#f9a8d4',stroke:'#1f2937','stroke-width':2},svg);el('polygon',{points:`${x+w-26},${y} ${x+w},${y+13} ${x+w-26},${y+26}`,fill:'#fde68a',stroke:'#1f2937','stroke-width':2},svg);};
+    txt(svg,x0,40,'1 pencil:',16,'#475569','700','start');pencil(x0+80,22,U);
+    const L=meas.w+meas.p/meas.d;
+    el('rect',{x:x0,y:120,width:L*U,height:44,fill:'#111827'},svg);
+    if(meas.show){for(let i=0;i<Math.ceil(L);i++)pencil(x0+i*U,180,U);el('rect',{x:x0+L*U,y:170,width:(Math.ceil(L)-L)*U+4,height:50,fill:'#fff',opacity:.75},svg);
+      for(let i=1;i<=meas.w*meas.d+meas.p;i++){const x=x0+i*U/meas.d;el('line',{x1:x,x2:x,y1:230,y2:244,stroke:'#dc2626','stroke-width':2},svg);}}
+    s='How long is the black bar, measured in pencils?';
+    const ans=meas.w?`${meas.w} and ${meas.p}/${meas.d}`:`${meas.p}/${meas.d}`;
+    const opts=new Set([ans]);const alt=[`${meas.w+1}`,`${meas.w}`,`${meas.w} and ${meas.d-meas.p}/${meas.d}`,`${meas.w} and 1/${meas.d}`,`${meas.w+1} and ${meas.p}/${meas.d}`];
+    alt.forEach(a=>{if(opts.size<4&&a!=='0')opts.add(a);});
+    [...opts].sort(()=>Math.random()-.5).forEach(o=>{const b=document.createElement('button');b.textContent=o+' pencils';b.onclick=()=>{if(o===ans){$('say').innerHTML=`✓ Yes! The bar is <b>${ans}</b> pencils long.`;meas.show=true;render();$('say').innerHTML=`✓ Yes! The bar is <b>${ans}</b> pencils long.`;}else{b.disabled=true;b.style.opacity=.35;$('say').innerHTML=o===String(meas.w+1)||o===String(meas.w)?'Is it exactly a whole number of pencils? Look at the end.':'Not quite. How many pencils fit, and what fraction of a pencil is left?';}};$('opts').appendChild(b);});
+    if(meas.show)$('opts').innerHTML='';
+  }
+  $('say').innerHTML=s;
+}
+function newMeas(silent){const d=[2,4,3][Math.floor(Math.random()*3)];meas={w:1+Math.floor(Math.random()*2),d,p:1+Math.floor(Math.random()*(d-1)),show:false};if(!silent)render();}
+svg.addEventListener('pointermove',e=>{if(!drag)return;const p=pt(svg,e),c=(p.x-80)/840,lo=drag.i?diy.cuts[drag.i-1]+0.03:0.03,hi=drag.i<diy.cuts.length-1?diy.cuts[drag.i+1]-0.03:0.97;diy.cuts[drag.i]=Math.max(lo,Math.min(hi,c));render();});
+svg.addEventListener('pointerup',()=>{drag=null;});
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b));if(tab==='diy')diy.cuts=Array.from({length:diy.n-1},(_,i)=>(i+1)/diy.n+(Math.random()-.5)*0.12).sort();ctl();render();});
+ctl();render();
+</script></body></html>

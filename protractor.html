@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Protractor</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:14px}
+.title{font-weight:700;margin-right:6px;font-size:16px}
+button,input{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+input{width:80px}
+#readout{margin-left:auto;font-size:18px;font-weight:700;padding:3px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px}
+#fb{font-weight:600}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Protractor</span>
+<button id="protBtn" class="on">Show protractor</button>
+<button id="fullBtn">360° protractor</button>
+<button id="alignBtn">Line up protractor</button>
+<button id="reflexBtn">Reflex angle</button>
+<button id="showBtn" class="on">Show angle size</button>
+<button id="numBtn">Numberless protractor</button>
+<span id="readout"></span>
+</div>
+<div class="bar">
+<button data-am="one" class="on">One angle</button><button data-am="line">Angles on a straight line</button><button data-am="point">Angles at a point</button>
+<button id="randBtn">New random angle</button>
+<label>I measured <input id="ans" type="number" min="0" max="360"> °</label><button id="checkBtn">Check</button>
+<span id="fb"></span>
+</div>
+<svg id="svg" viewBox="0 0 1000 560"></svg>
+<div class="hint">Drag the round ends of the arms to change the angle. Drag the protractor to move it, and drag its orange ⟳ handle to turn it. Put the centre cross on the vertex and line up 0° with one arm, then read the scale.</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,anchor,wt,extra){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none',...(extra||{})},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),RAD=Math.PI/180;
+const V={x:430,y:330},ARM=240,PR=210;
+let a1=10,a2=65,reflex=false,prot={x:650,y:300,rot:0},showProt=true,full=false,showSize=true,drag=null;
+const norm=d=>((d%360)+360)%360;
+function P(c,ang,r){return [c.x+r*Math.cos(ang*RAD),c.y-r*Math.sin(ang*RAD)];}
+function angleSize(){const d=norm(a2-a1),inner=d<=180?d:360-d;return reflex?360-inner:inner;}
+function typeName(s){if(s===0)return 'Zero';if(s<90)return 'Acute';if(s===90)return 'Right';if(s<180)return 'Obtuse';if(s===180)return 'Straight';if(s<360)return 'Reflex';return 'Revolution';}
+let numberless=false,am='one',lineA=55,pts=[30,150,250];
+const ACOL=['#fde68a','#bfdbfe','#bbf7d0'],ASTR=['#d97706','#2563eb','#16a34a'];
+function arc(s,sw,r,i){const [sx,sy]=P(V,s,r),[ex,ey]=P(V,s+sw,r);el('path',{d:`M${V.x} ${V.y} L${sx} ${sy} A${r} ${r} 0 ${sw>180?1:0} 0 ${ex} ${ey} Z`,fill:ACOL[i],stroke:ASTR[i],'stroke-width':2,opacity:.9},svg);
+  const [lx,ly]=P(V,s+sw/2,r+34);txt(svg,lx,ly+6,showSize?Math.round(sw)+'°':'?',18,ASTR[i],'800');}
+function renderMulti(){
+  let angs;
+  if(am==='line'){angs=[[0,lineA],[lineA,180-lineA]];
+    const [l1x,l1y]=P(V,0,ARM),[l2x,l2y]=P(V,180,ARM);el('line',{x1:l1x,y1:l1y,x2:l2x,y2:l2y,stroke:'#1f2937','stroke-width':4},svg);}
+  else{const so=pts.map((a,i)=>[norm(a),i]).sort((a,b)=>a[0]-b[0]);angs=so.map((v,i)=>[v[0],norm(so[(i+1)%3][0]-v[0])||360]);}
+  angs.forEach(([st,sw],i)=>arc(st,sw,56+i*6,i));
+  const arms=am==='line'?[lineA]:pts;
+  arms.forEach(a=>{const [x,y]=P(V,a,ARM);el('line',{x1:V.x,y1:V.y,x2:x,y2:y,stroke:'#1f2937','stroke-width':4,'stroke-linecap':'round'},svg);});
+  el('circle',{cx:V.x,cy:V.y,r:5,fill:'#1f2937'},svg);
+  if(showProt)drawProt();
+  arms.forEach((a,k)=>{const [x,y]=P(V,a,ARM),h=el('circle',{cx:x,cy:y,r:14,fill:'#2563eb',stroke:'#fff','stroke-width':3,style:'cursor:grab'},svg);h.addEventListener('pointerdown',e=>start({t:'marm',k},e));});
+  const vals=angs.map(a=>Math.round(a[1]));
+  $('readout').textContent=showSize?`${vals.join('° + ')}° = ${am==='line'?180:360}°`:(am==='line'?'? + ? = 180°':'? + ? + ? = 360°');
+}
+function render(){
+  svg.innerHTML='';
+  el('rect',{x:0,y:0,width:1000,height:560,fill:'#fff'},svg);
+  if(am!=='one'){renderMulti();return;}
+  // angle arc (sweep from start to end ccw)
+  const d=norm(a2-a1);let s=a1,sw=d;
+  if((d>180)!==reflex){s=a2;sw=360-d;}
+  const r0=48,[sx,sy]=P(V,s,r0),[ex,ey]=P(V,s+sw,r0);
+  if(sw>0.5&&sw<359.5)el('path',{d:`M${V.x} ${V.y} L${sx} ${sy} A${r0} ${r0} 0 ${sw>180?1:0} 0 ${ex} ${ey} Z`,fill:'#fde68a',stroke:'#d97706','stroke-width':2},svg);
+  if(Math.abs(sw-90)<0.5&&!reflex){const [ax,ay]=P(V,s,22),[bx,by]=P(V,s+90,22),[cx,cy]=P(V,s+45,22*Math.SQRT2);el('path',{d:`M${ax} ${ay} L${cx} ${cy} L${bx} ${by}`,fill:'none',stroke:'#d97706','stroke-width':2},svg);}
+  // arms
+  for(const a of [a1,a2]){const [x,y]=P(V,a,ARM);el('line',{x1:V.x,y1:V.y,x2:x,y2:y,stroke:'#1f2937','stroke-width':4,'stroke-linecap':'round'},svg);}
+  el('circle',{cx:V.x,cy:V.y,r:5,fill:'#1f2937'},svg);
+  if(showProt)drawProt();
+  // arm handles on top
+  [a1,a2].forEach((a,k)=>{const [x,y]=P(V,a,ARM),h=el('circle',{cx:x,cy:y,r:14,fill:'#2563eb',stroke:'#fff','stroke-width':3,style:'cursor:grab'},svg);h.addEventListener('pointerdown',e=>start({t:'arm',k},e));});
+  const sz=angleSize();
+  $('readout').textContent=showSize?`${sz}° · ${typeName(sz)}`:'? °';
+}
+function drawProt(){
+  const g=el('g',{transform:`translate(${prot.x} ${prot.y}) rotate(${-prot.rot})`},svg);
+  const body=full?el('circle',{r:PR,fill:'#bfdbfe','fill-opacity':.45,stroke:'#1e40af','stroke-width':2,style:'cursor:move'},g)
+    :el('path',{d:`M${-PR-12} 0 A${PR+12} ${PR+12} 0 0 1 ${PR+12} 0 L${PR+12} 22 L${-PR-12} 22 Z`,fill:'#bfdbfe','fill-opacity':.45,stroke:'#1e40af','stroke-width':2,style:'cursor:move'},g);
+  body.addEventListener('pointerdown',e=>start({t:'move'},e));
+  const max=full?359:180;
+  let dd='';
+  for(let t=0;t<=max;t++){if(numberless&&t%10)continue;const L=t%10===0?20:t%5===0?13:7,c=Math.cos(t*RAD),s=Math.sin(t*RAD);dd+=`M${PR*c} ${-PR*s}L${(PR-L)*c} ${-(PR-L)*s}`;}
+  el('path',{d:dd,stroke:'#1e3a8a','stroke-width':1,'pointer-events':'none'},g);
+  // scales: inner counterclockwise from right (blue), outer clockwise from left (red) — semicircle only
+  for(let t=0;t<=max;t+=10){if(numberless)break;
+    const c=Math.cos(t*RAD),s=Math.sin(t*RAD);
+    const r1=PR-34,lbl=String(t),rotT=90-t;
+    txt(g,r1*c,-r1*s+4,lbl,12,'#1e3a8a','middle','700',{transform:`rotate(${rotT} ${r1*c} ${-r1*s})`});
+    if(!full){const r2=PR-52;txt(g,r2*c,-r2*s+4,String(180-t),11,'#b91c1c','middle','600',{transform:`rotate(${rotT} ${r2*c} ${-r2*s})`});}
+  }
+  if(!full)el('line',{x1:-PR,x2:PR,y1:0,y2:0,stroke:'#1e3a8a','stroke-width':1.5,'pointer-events':'none'},g);
+  el('path',{d:'M-10 0H10M0 -10V10',stroke:'#dc2626','stroke-width':2,'pointer-events':'none'},g);
+  // rotate handle
+  const hx=full?PR+26:PR+30,hy=full?0:10;
+  const h=el('g',{style:'cursor:grab'},g);el('circle',{cx:hx,cy:hy,r:14,fill:'#f97316',stroke:'#fff','stroke-width':3},h);txt(h,hx,hy+5,'⟳',15,'#fff','middle','700');
+  h.addEventListener('pointerdown',e=>start({t:'rot'},e));
+}
+function start(dg,e){const p=pt(svg,e);drag={...dg,ox:p.x-prot.x,oy:p.y-prot.y,r0:prot.rot,a0:Math.atan2(-(p.y-prot.y),p.x-prot.x)/RAD};svg.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();}
+svg.addEventListener('pointermove',e=>{
+  if(!drag)return;const p=pt(svg,e);
+  if(drag.t==='marm'){const a=Math.round(Math.atan2(-(p.y-V.y),p.x-V.x)/RAD);if(am==='line')lineA=Math.max(1,Math.min(179,norm(a)>180?(norm(a)>270?1:179):norm(a)));else pts[drag.k]=norm(a);render();return;}
+  if(drag.t==='arm'){const a=Math.round(Math.atan2(-(p.y-V.y),p.x-V.x)/RAD);if(drag.k)a2=norm(a);else a1=norm(a);$('fb').textContent='';}
+  else if(drag.t==='move'){prot.x=p.x-drag.ox;prot.y=p.y-drag.oy;if(Math.hypot(prot.x-V.x,prot.y-V.y)<12){prot.x=V.x;prot.y=V.y;}}
+  else{const a=Math.atan2(-(p.y-prot.y),p.x-prot.x)/RAD;let r=Math.round(drag.r0+a-drag.a0);for(const t of [a1,a2,a1+180,a2+180])if(Math.abs(((r-t)%360+540)%360-180)<=3)r=t;prot.rot=norm(r);}
+  render();
+});
+svg.addEventListener('pointerup',()=>{drag=null;});
+$('protBtn').onclick=e=>{showProt=!showProt;e.target.classList.toggle('on',showProt);render();};
+$('fullBtn').onclick=e=>{full=!full;e.target.classList.toggle('on',full);render();};
+$('alignBtn').onclick=()=>{prot.x=V.x;prot.y=V.y;const d=norm(a2-a1),first=(d<=180)!==reflex?a1:a2;prot.rot=full?first:first;render();};
+$('reflexBtn').onclick=e=>{reflex=!reflex;e.target.classList.toggle('on',reflex);render();};
+$('showBtn').onclick=e=>{showSize=!showSize;e.target.classList.toggle('on',showSize);render();};
+$('randBtn').onclick=()=>{
+  a1=Math.floor(Math.random()*360);let s;do{s=5+Math.floor(Math.random()*171);}while(s%5!==0&&Math.random()<0.3);
+  a2=norm(a1+(Math.random()<0.5?s:-s));reflex=false;$('reflexBtn').classList.remove('on');
+  showSize=false;$('showBtn').classList.remove('on');prot={x:760,y:430,rot:0};$('ans').value='';$('fb').textContent='';render();
+};
+$('checkBtn').onclick=()=>{
+  const v=+$('ans').value,sz=angleSize(),fb=$('fb');
+  if($('ans').value===''){fb.textContent='Type your measurement first.';fb.style.color='#92400e';return;}
+  if(Math.abs(v-sz)<=1){fb.textContent=`✓ Yes! It is ${sz}°, ${typeName(sz).toLowerCase()} angle.`;fb.style.color='#15803d';}
+  else if(Math.abs(v-(180-sz))<=1&&sz!==90){fb.textContent='✗ Close. Check you used the scale that starts at 0° on your arm.';fb.style.color='#b91c1c';}
+  else{fb.textContent='✗ Not quite. Is it acute or obtuse? Measure again.';fb.style.color='#b91c1c';}
+};
+$('numBtn').onclick=e=>{numberless=!numberless;e.target.classList.toggle('on',numberless);render();};
+document.querySelectorAll('[data-am]').forEach(b=>b.onclick=()=>{am=b.dataset.am;document.querySelectorAll('[data-am]').forEach(x=>x.classList.toggle('on',x===b));
+  ['randBtn','checkBtn','ans','alignBtn','reflexBtn'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display=am==='one'?'':'none';});$('fb').textContent=am==='line'?'Angles on a straight line add to 180°.':am==='point'?'Angles around a point add to 360° (a revolution).':'';
+  if(am!=='one'){prot={x:V.x,y:V.y,rot:0};full=am==='point';$('fullBtn').classList.toggle('on',full);}render();});
+render();
+</script></body></html>

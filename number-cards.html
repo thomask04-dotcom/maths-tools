@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Number Cards</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:16px;padding:7px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#say{font-size:22px;padding:8px 14px;min-height:46px}
+#opts{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 8px}
+#opts button{font-size:22px;font-weight:800;min-width:58px}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Number Cards</span>
+<button data-r="1,10">1 to 10</button><button data-r="1,20" class="on">1 to 20</button><button data-r="0,20">0 to 20</button><button data-r="100,120">100 to 120</button>
+</div>
+<div class="bar"><button id="ordBtn" class="on">Put in order</button><button id="chkBtn">✓ Check</button><button id="shufBtn">🔀 Shuffle</button><button id="covBtn">🙈 Cover-up game</button></div>
+<div id="say"></div>
+<div id="opts"></div>
+<svg id="svg" viewBox="0 0 1000 440"></svg>
+<div class="hint">Drag the cards into the spaces from smallest to largest, then press Check. Cover-up game: some cards at the start are turned over. How many are hidden? Can you tell without counting from 1?</div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+let lo=1,hi=20,cards=[],slots=[],drag=null,mode='order',cover=0,marks=null;
+function N(){return hi-lo+1;}
+function geom(){const n=N(),per=Math.min(n,11),rows=Math.ceil(n/per),W=Math.min(82,940/per),H=W*1.25;return {n,per,rows,W,H};}
+function slotXY(i){const g=geom(),r=Math.floor(i/g.per),c=i%g.per,x0=(1000-g.per*g.W)/2;return [x0+c*g.W+4,250+r*(g.H+14)];}
+function deal(){const g=geom();cards=[];for(let v=lo;v<=hi;v++)cards.push({v,x:0,y:0,slot:-1});cards.sort(()=>Math.random()-.5);
+  cards.forEach((c,i)=>{c.x=30+(i%12)*(940/12)+Math.random()*8;c.y=20+Math.floor(i/12)*(g.H+10)+Math.random()*8;});slots=Array(g.n).fill(null);marks=null;
+  svg.setAttribute('viewBox',`0 0 1000 ${270+g.rows*(g.H+14)}`);}
+function card(g,c,W,H,face,col){const gr=el('g',{style:'cursor:grab'},svg);el('rect',{x:c.x,y:c.y,width:W-8,height:H,rx:10,fill:face?'#fff':'#1e3a8a',stroke:col||'#334155','stroke-width':col?4:2},gr);
+  if(face)txt(gr,c.x+(W-8)/2,c.y+H/2+W*0.18,String(c.v),W*(String(c.v).length>2?0.36:0.5),'#111827','800');else{for(let i=0;i<3;i++)el('circle',{cx:c.x+(W-8)/2,cy:c.y+H*(0.3+i*0.2),r:4,fill:'#93c5fd'},gr);}return gr;}
+function render(){
+  svg.innerHTML='';const g=geom();
+  if(mode==='order'){
+    txt(svg,500,236,'smallest → largest',15,'#64748b','700');
+    for(let i=0;i<g.n;i++){const [x,y]=slotXY(i);el('rect',{x,y,width:g.W-8,height:g.H,rx:10,fill:'#f8fafc',stroke:'#cbd5e1','stroke-width':2,'stroke-dasharray':'6 5'},svg);}
+    cards.forEach((c,i)=>{const col=marks?(c.slot<0?null:(marks[c.slot]?'#16a34a':'#dc2626')):null;const gr=card(g,c,g.W,g.H,true,col);gr.addEventListener('pointerdown',e=>{const p=pt(svg,e);drag={c,dx:p.x-c.x,dy:p.y-c.y};cards=cards.filter(q=>q!==c);cards.push(c);marks=null;svg.setPointerCapture(e.pointerId);e.preventDefault();render();});});
+  } else {
+    const all=[];for(let v=lo;v<=hi;v++)all.push({v,slot:v-lo});all.forEach(c=>{[c.x,c.y]=slotXY(c.slot);c.y-=200;card(g,c,g.W,g.H,c.slot>=cover);});
+  }
+}
+svg.addEventListener('pointermove',e=>{if(!drag)return;const p=pt(svg,e);drag.c.x=p.x-drag.dx;drag.c.y=p.y-drag.dy;render();});
+svg.addEventListener('pointerup',()=>{if(!drag)return;const c=drag.c,g=geom();drag=null;if(c.slot>=0)slots[c.slot]=null;c.slot=-1;
+  let best=-1,bd=60;for(let i=0;i<g.n;i++){const [x,y]=slotXY(i),d=Math.hypot(c.x-x,c.y-y);if(d<bd&&!slots[i]){bd=d;best=i;}}
+  if(best>=0){[c.x,c.y]=slotXY(best);c.slot=best;slots[best]=c;}render();});
+function say(s){$('say').innerHTML=s;}
+$('chkBtn').onclick=()=>{if(mode!=='order')return;marks=slots.map((c,i)=>c?c.v===lo+i:null);const placed=slots.filter(Boolean).length,ok=marks.filter(m=>m===true).length;
+  say(ok===N()?'🎉 All in order! Well done.':`${ok} of ${placed} placed card${placed===1?' is':'s are'} in the right space.`+(placed<N()?` ${N()-placed} still to place.`:''));render();};
+$('shufBtn').onclick=()=>{mode='order';setMode();deal();say('Put the cards in order from smallest to largest.');render();};
+$('ordBtn').onclick=()=>$('shufBtn').click();
+function setMode(){$('ordBtn').classList.toggle('on',mode==='order');$('covBtn').classList.toggle('on',mode==='cover');$('chkBtn').style.display=mode==='order'?'':'none';$('opts').innerHTML='';}
+$('covBtn').onclick=()=>{mode='cover';setMode();const g=geom();svg.setAttribute('viewBox',`0 0 1000 ${70+g.rows*(g.H+14)}`);cover=2+Math.floor(Math.random()*Math.min(9,N()-3));render();
+  const first=lo+cover;say(`Some cards are turned over. The first card you can see is <b>${first}</b>. How many cards are covered?`);
+  const O=$('opts');for(let i=1;i<=Math.min(12,N()-1);i++){const b=document.createElement('button');b.textContent=i;b.onclick=()=>{if(i===cover){say(`✓ Yes! ${cover} cards are covered: ${Array.from({length:cover},(_,j)=>lo+j).join(', ')}.`);O.innerHTML='';const c2=cover;cover=0;render();cover=c2;}else{b.disabled=true;b.style.opacity=.3;say(`Not quite. The cards start at ${lo}. Which numbers come before ${first}?`);}};O.appendChild(b);}};
+document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{[lo,hi]=b.dataset.r.split(',').map(Number);document.querySelectorAll('[data-r]').forEach(x=>x.classList.toggle('on',x===b));mode='order';setMode();deal();say('Put the cards in order from smallest to largest.');render();});
+deal();say('Put the cards in order from smallest to largest.');render();
+</script></body></html>
