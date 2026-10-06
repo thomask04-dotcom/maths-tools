@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tessellation</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:15px}
+.title{font-weight:700;margin-right:6px;font-size:17px}
+button{font:inherit;font-size:15px;padding:6px 11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+button.sh{display:inline-flex;align-items:center;gap:6px}
+button.sh svg{width:22px;height:22px;display:inline}
+.mode button{font-size:16px;font-weight:600}
+input[type=range]{width:220px}
+#say{font-size:19px;padding:8px 14px;min-height:72px;line-height:1.5}
+#svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar mode"><span class="title">Tessellation</span>
+<button data-mode="make" class="on">🧩 Make a tessellation</button><button data-mode="check">❓ Does it tessellate?</button><button data-mode="explore">🔺 Any triangle or quadrilateral</button>
+</div>
+<!-- make -->
+<div class="bar" id="makeBar"><span>Shape:</span><span id="mkShapes" style="display:contents"></span></div>
+<div class="bar" id="makeBar2">
+<button id="turnBtn">↻ Turn the shape</button><button id="rmBtn">🧽 Remove tiles</button><button id="undoBtn">↶ Undo</button><button id="clrBtn">Clear</button><button id="fillBtn">✨ Fill the page with this shape</button><button id="chkBtn">🔍 Check for gaps</button>
+</div>
+<!-- check -->
+<div class="bar" id="checkBar" style="display:none"><span>Shape:</span><span id="ckShapes" style="display:contents"></span></div>
+<div class="bar" id="checkBar2" style="display:none">
+<button id="addBtn" style="font-weight:700">➕ Add another one around the point</button><button id="againBtn">Start again</button><button id="angBtn">Show angles</button><button id="seeBtn" style="display:none">🧩 See it tessellate</button>
+</div>
+<!-- explore -->
+<div class="bar" id="exBar1" style="display:none">
+<button data-s="tri" class="on">Any triangle</button><button data-s="quad">Any quadrilateral</button><button data-s="sq">Square</button><button data-s="hex">Regular hexagon</button><button data-s="pent">Regular pentagon</button><button data-s="oct">Regular octagon</button>
+</div>
+<div class="bar" id="exBar2" style="display:none">
+<span>Tiles:</span><input type="range" id="count" min="1" max="120" value="120">
+<button id="pairBtn">Show the pair</button><button id="colBtn" class="on">Two colours</button><button id="sqBtn" style="display:none">Add squares to fill the gaps</button>
+</div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 600"></svg>
+<div class="hint" id="hint"></div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+let mode='make';
+const HINTS={make:'Choose a shape, then tap the page to put down a tile. Tap next to the edge of a tile to add the next one: it fits edge to edge. "Turn the shape" changes which way the next tile goes. You can mix shapes! "Check for gaps" shows any gaps that can\'t be filled.',
+  check:'Shapes tessellate when copies fit together with no gaps and no overlaps. Keep adding copies around one point: if they fit exactly all the way around, the shape tessellates.',
+  explore:'For the triangle and quadrilateral, drag the orange corners to make any shape you like. It will still tessellate! Each copy is either translated (slid) or rotated a half turn. Use the slider to build the tiling one tile at a time.'};
+
+/* ================= shapes & geometry ================= */
+const L=50,W=1000,H=600;
+const SH={
+  tri:{n:'triangle',len:[1,1,1],ang:[60,60,60],c:'#4ade80'},
+  sq:{n:'square',len:[1,1,1,1],ang:[90,90,90,90],c:'#fb923c'},
+  hex:{n:'hexagon',len:[1,1,1,1,1,1],ang:[120,120,120,120,120,120],c:'#facc15'},
+  rhom:{n:'rhombus',len:[1,1,1,1],ang:[60,120,60,120],c:'#60a5fa'},
+  trap:{n:'trapezium',len:[2,1,1,1],ang:[60,60,120,120],c:'#f87171'},
+  rect:{n:'rectangle',len:[2,1,2,1],ang:[90,90,90,90],c:'#c084fc'},
+  pent:{n:'pentagon',len:[1,1,1,1,1],ang:[108,108,108,108,108],c:'#2dd4bf'},
+  oct:{n:'octagon',len:[1,1,1,1,1,1,1,1],ang:[135,135,135,135,135,135,135,135],c:'#f472b6'},
+  circ:{n:'circle',c:'#a3a3a3'}
+};
+const PL=k=>({tri:'triangles',sq:'squares',hex:'hexagons',rhom:'rhombuses',trap:'trapeziums',rect:'rectangles',pent:'pentagons',oct:'octagons',circ:'circles'})[k];
+function local(k){const s=SH[k],n=s.len.length,P=[];let x=0,y=0,h=0;for(let i=0;i<n;i++){P.push([x,y]);x+=s.len[i]*L*Math.cos(h);y+=s.len[i]*L*Math.sin(h);h-=(180-s.ang[(i+1)%n])*Math.PI/180;}return P;}
+const LOC={};for(const k in SH)if(SH[k].len)LOC[k]=local(k);
+const cen=P=>{let x=0,y=0;P.forEach(p=>{x+=p[0];y+=p[1];});return [x/P.length,y/P.length];};
+function xform(k,e,X,ang){// map local edge e start -> X, edge direction -> ang
+  const P=LOC[k],a=P[e],b=P[(e+1)%P.length],th=ang-Math.atan2(b[1]-a[1],b[0]-a[0]),c=Math.cos(th),s=Math.sin(th);
+  return P.map(v=>{const dx=v[0]-a[0],dy=v[1]-a[1];return [X[0]+dx*c-dy*s,X[1]+dx*s+dy*c];});}
+function placeAt(k,t){const P=xform(k,0,[0,0],0),c=cen(P);return P.map(v=>[v[0]-c[0]+t[0],v[1]-c[1]+t[1]]);}
+function shrink(P){const c=cen(P);return P.map(v=>[c[0]+(v[0]-c[0])*.95,c[1]+(v[1]-c[1])*.95]);}
+function sepAxis(A,B){for(const P of [A,B])for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length],nx=q[1]-p[1],ny=p[0]-q[0];
+  let a1=Infinity,a2=-Infinity,b1=Infinity,b2=-Infinity;for(const v of A){const d=v[0]*nx+v[1]*ny;a1=Math.min(a1,d);a2=Math.max(a2,d);}for(const v of B){const d=v[0]*nx+v[1]*ny;b1=Math.min(b1,d);b2=Math.max(b2,d);}
+  if(a2<b1||b2<a1)return true;}return false;}
+function overlapsAny(P,list){const S=shrink(P),c=cen(P);for(const T of list){const tc=T.c||cen(T.p);if(Math.hypot(tc[0]-c[0],tc[1]-c[1])>4.2*L)continue;if(!sepAxis(S,shrink(T.p)))return true;}return false;}
+function segDist(t,p,q){const dx=q[0]-p[0],dy=q[1]-p[1],u=Math.max(0,Math.min(1,((t[0]-p[0])*dx+(t[1]-p[1])*dy)/(dx*dx+dy*dy)));return Math.hypot(t[0]-p[0]-u*dx,t[1]-p[1]-u*dy);}
+function cross(p,q,t){return (q[0]-p[0])*(t[1]-p[1])-(q[1]-p[1])*(t[0]-p[0]);}
+function inside(P,t){const c=cen(P),sg=Math.sign(cross(P[0],P[1],c));for(let i=0;i<P.length;i++)if(Math.sign(cross(P[i],P[(i+1)%P.length],t))!==sg)return false;return true;}
+// all ways to attach shape k onto edge P->Q of an existing tile; sorted so that the preferred edge / nearest position comes first
+function attachOptions(k,P,Q,t,pref){
+  const m=Math.round(Math.hypot(Q[0]-P[0],Q[1]-P[1])/L),u=[(P[0]-Q[0])/(m*L),(P[1]-Q[1])/(m*L)],ang=Math.atan2(u[1],u[0]),n=LOC[k].length,out=[];
+  for(let j=0;j<n;j++){const e=(pref+j)%n,l=SH[k].len[e],Xs=[];
+    if(l<=m)for(let i=0;i<=m-l;i++)Xs.push([Q[0]+i*L*u[0],Q[1]+i*L*u[1]]);else for(let i=0;i<=l-m;i++)Xs.push([Q[0]-i*L*u[0],Q[1]-i*L*u[1]]);
+    Xs.forEach(X=>{const mid=[X[0]+u[0]*l*L/2,X[1]+u[1]*l*L/2];out.push({e,X,ang,rank:j*1000+(l===m?0:100)+(t?Math.hypot(mid[0]-t[0],mid[1]-t[1]):0)});});}
+  out.sort((a,b)=>a.rank-b.rank);return out.map(o=>xform(k,o.e,o.X,o.ang));}
+const inView=P=>P.every(v=>v[0]>-2*L&&v[0]<W+2*L&&v[1]>-2*L&&v[1]<H+2*L);
+
+/* ================= analysis: gaps that can't be filled ================= */
+function analyse(tiles){
+  const pts=[];
+  tiles.forEach(T=>T.p.forEach((v,i)=>{let c=pts.find(q=>Math.hypot(q.x-v[0],q.y-v[1])<3);if(!c){c={x:v[0],y:v[1],sum:0,n:0};pts.push(c);}c.sum+=SH[T.k].ang[i];c.n++;}));
+  pts.forEach(c=>tiles.forEach(T=>T.p.forEach((v,i)=>{const w=T.p[(i+1)%T.p.length];if(segDist([c.x,c.y],v,w)<2&&Math.hypot(c.x-v[0],c.y-v[1])>3&&Math.hypot(c.x-w[0],c.y-w[1])>3){c.sum+=180;c.n++;}})));
+  const used=[...new Set(tiles.map(T=>T.k))],A=new Set();used.forEach(k=>{SH[k].ang.forEach(a=>A.add(a));if(SH[k].len.some(l=>l>1))A.add(180);});
+  const ok=new Array(361).fill(false);ok[0]=true;for(let r=1;r<=360;r++)for(const a of A)if(a<=r&&ok[r-a]){ok[r]=true;break;}
+  pts.forEach(c=>{c.r=Math.round(360-c.sum);c.full=Math.abs(c.r)<1;c.stuck=c.n>=2&&c.r>0&&!ok[c.r];});
+  return pts;}
+function enclosedGaps(tiles){// raster: background pixels that can't be reached from the edge of the page
+  const s=.5,w=W*s,h=H*s,cv=document.createElement('canvas');cv.width=w;cv.height=h;const g=cv.getContext('2d');
+  g.fillStyle='#fff';g.fillRect(0,0,w,h);g.fillStyle='#000';g.strokeStyle='#000';g.lineWidth=2;g.lineJoin='round';
+  tiles.forEach(T=>{g.beginPath();T.p.forEach((v,i)=>i?g.lineTo(v[0]*s,v[1]*s):g.moveTo(v[0]*s,v[1]*s));g.closePath();g.fill();g.stroke();});
+  const d=g.getImageData(0,0,w,h).data,lab=new Int32Array(w*h),free=i=>d[i*4]>128;
+  const fill=(start,id)=>{const st=[start],px=[];lab[start]=id;while(st.length){const i=st.pop();px.push(i);const x=i%w,y=(i-x)/w;for(const j of [x>0?i-1:-1,x<w-1?i+1:-1,y>0?i-w:-1,y<h-1?i+w:-1])if(j>=0&&!lab[j]&&free(j)){lab[j]=id;st.push(j);}}return px;};
+  for(let x=0;x<w;x++)for(const y of [0,h-1]){const i=y*w+x;if(!lab[i]&&free(i))fill(i,1);}
+  for(let y=0;y<h;y++)for(const x of [0,w-1]){const i=y*w+x;if(!lab[i]&&free(i))fill(i,1);}
+  const gaps=[];let id=2;for(let i=0;i<w*h;i++)if(!lab[i]&&free(i)){const px=fill(i,id++);if(px.length>=25)gaps.push(px);}
+  if(!gaps.length)return null;
+  const o=document.createElement('canvas');o.width=w;o.height=h;const og=o.getContext('2d'),im=og.createImageData(w,h);
+  gaps.forEach(px=>px.forEach(i=>{im.data[i*4]=220;im.data[i*4+1]=38;im.data[i*4+2]=38;im.data[i*4+3]=235;}));og.putImageData(im,0,0);
+  return {n:gaps.length,url:o.toDataURL(),centres:gaps.map(px=>{let X=0,Y=0;px.forEach(i=>{X+=i%w;Y+=Math.floor(i/w);});return [X/px.length/s,Y/px.length/s];})};}
+
+/* ================= shape buttons ================= */
+function icon(k){const s=document.createElementNS(NS,'svg');s.setAttribute('viewBox','-6 -6 112 112');
+  if(k==='circ')el('circle',{cx:50,cy:50,r:45,fill:SH[k].c,stroke:'#1f2937','stroke-width':5},s);
+  else{const P=LOC[k],xs=P.map(p=>p[0]),ys=P.map(p=>p[1]),x0=Math.min(...xs),y0=Math.min(...ys),sz=Math.max(Math.max(...xs)-x0,Math.max(...ys)-y0);
+    el('polygon',{points:P.map(p=>[(p[0]-x0)/sz*100,(p[1]-y0)/sz*100].join(',')).join(' '),fill:SH[k].c,stroke:'#1f2937','stroke-width':5,'stroke-linejoin':'round'},s);}
+  return s;}
+function shapeButtons(box,keys,get,set){box.innerHTML='';keys.forEach(k=>{const b=document.createElement('button');b.className='sh'+(get()===k?' on':'');b.appendChild(icon(k));b.append(SH[k].n);b.onclick=()=>{set(k);box.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));};box.appendChild(b);});}
+
+/* ================= MAKE ================= */
+let mk={k:'hex',tiles:[],hist:[],turn:0,rm:false,chk:false,ghost:null,msg:null};
+const MK_KEYS=['tri','sq','hex','rhom','trap','rect','pent','oct'];
+function candidate(t){const k=mk.k;
+  if(!mk.tiles.length)return {p:placeAt(k,t),ok:true};
+  const near=[];mk.tiles.forEach(T=>T.p.forEach((v,i)=>{const w=T.p[(i+1)%T.p.length],d=segDist(t,v,w);if(d<.9*L&&!inside(T.p,t))near.push({d,v,w});}));
+  if(!near.length)return null;near.sort((a,b)=>a.d-b.d);
+  let first=null;for(const c of near.slice(0,3)){for(const P of attachOptions(k,c.v,c.w,t,mk.turn)){if(!first)first=P;if(inView(P)&&!overlapsAny(P,mk.tiles))return {p:P,ok:true};}}
+  return {p:first,ok:false};}
+function addTile(P,k){mk.tiles.push({k,p:P,c:cen(P)});}
+function mkStatus(){const T=mk.tiles;if(!T.length)return 'Choose a shape, then <b>tap the page</b> to put down your first tile.';
+  const A=analyse(T),stuck=A.filter(c=>c.stuck).length,full=A.filter(c=>c.full).length,G=mk.gaps,used=[...new Set(T.map(t=>t.k))].map(PL);
+  const names=used.length===1?used[0]:used.slice(0,-1).join(', ')+' and '+used[used.length-1];
+  if(stuck||(G&&G.n))return `${T.length} tiles. ⚠ <b>There ${(stuck+(G?G.n:0))===1?'is a gap':'are gaps'}</b> that can't be filled with ${names}`+(mk.chk?' (red)':'')+'. '+(mk.chk?'':'Press "Check for gaps" to see '+((stuck+(G?G.n:0))===1?'it':'them')+'. ')+(used.length===1&&['pent','oct'].includes(T[0].k)?`${used[0][0].toUpperCase()+used[0].slice(1)} on their own <b>do not tessellate</b>.`+(T[0].k==='oct'?' Try adding squares!':''):'Try a different shape, or press Undo.');
+  return `${T.length} tile${T.length===1?'':'s'}. <b>No gaps and no overlaps</b> so far! `+(full?`${full} point${full===1?'':'s'} where tiles fit all the way around ✓. `:'')+'Tap next to an edge to add another tile.';}
+function renderMake(){svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  el('rect',{x:0,y:0,width:W,height:H,fill:'#fff'},svg);
+  const bg=el('rect',{x:0,y:0,width:W,height:H,fill:'transparent'},svg);
+  mk.tiles.forEach((T,i)=>{const p=el('polygon',{points:T.p.map(v=>v.join(',')).join(' '),fill:SH[T.k].c,stroke:'#1f2937','stroke-width':2.5,'stroke-linejoin':'round',style:mk.rm?'cursor:pointer':''},svg);
+    if(mk.rm)p.addEventListener('pointerdown',e=>{e.stopPropagation();mk.hist.push(mk.tiles.slice());mk.tiles.splice(i,1);mk.ghost=null;refreshGaps();render();});});
+  if(mk.chk){if(mk.gaps)el('image',{href:mk.gaps.url,x:0,y:0,width:W,height:H,opacity:.85,'pointer-events':'none'},svg);
+    analyse(mk.tiles).forEach(c=>{if(c.stuck){el('circle',{cx:c.x,cy:c.y,r:13,fill:'#dc2626',stroke:'#fff','stroke-width':3,'pointer-events':'none'},svg);}else if(c.full)el('circle',{cx:c.x,cy:c.y,r:5,fill:'#16a34a','pointer-events':'none'},svg);});
+    if(mk.gaps)mk.gaps.centres.forEach(c=>txt(svg,c[0],c[1]+6,'gap',16,'#fff','800'));}
+  if(mk.ghost&&!mk.rm)el('polygon',{points:mk.ghost.p.map(v=>v.join(',')).join(' '),fill:mk.ghost.ok?SH[mk.k].c:'#fecaca',opacity:mk.ghost.ok?.55:.7,stroke:mk.ghost.ok?'#1f2937':'#dc2626','stroke-width':2.5,'stroke-dasharray':'7 5','pointer-events':'none'},svg);
+  $('say').innerHTML=mk.msg||mkStatus();mk.msg=null;}
+function refreshGaps(){mk.gaps=enclosedGaps(mk.tiles);}
+svg.addEventListener('pointermove',e=>{if(mode!=='make'||mk.rm)return;const q=pt(svg,e),c=candidate([q.x,q.y]);const same=JSON.stringify(c&&c.p)===JSON.stringify(mk.ghost&&mk.ghost.p);if(!same){mk.ghost=c;render();}});
+svg.addEventListener('pointerleave',()=>{if(mode==='make'&&mk.ghost){mk.ghost=null;render();}});
+svg.addEventListener('pointerdown',e=>{if(mode!=='make'||mk.rm)return;const q=pt(svg,e),c=candidate([q.x,q.y]);
+  if(!c){mk.ghost=null;mk.msg='Tap <b>next to the edge</b> of a tile to add the next one.';render();return;}
+  if(!c.ok){mk.ghost=c;mk.msg=`A ${SH[mk.k].n} won't fit there: it would <b>overlap</b>. Try "Turn the shape", another edge, or another shape.`;render();return;}
+  mk.hist.push(mk.tiles.slice());addTile(c.p,mk.k);refreshGaps();mk.ghost=candidate([q.x,q.y]);render();});
+$('turnBtn').onclick=()=>{mk.turn=(mk.turn+1)%LOC[mk.k].length;mk.ghost=null;mk.msg=`The next ${SH[mk.k].n} will go a different way. Move or tap near an edge to see it.`;render();};
+$('rmBtn').onclick=e=>{mk.rm=!mk.rm;e.target.classList.toggle('on',mk.rm);mk.ghost=null;if(mk.rm)mk.msg='Tap a tile to remove it. Press "Remove tiles" again to go back to adding tiles.';render();};
+$('undoBtn').onclick=()=>{if(mk.hist.length){mk.tiles=mk.hist.pop();refreshGaps();}render();};
+$('clrBtn').onclick=()=>{if(mk.tiles.length)mk.hist.push(mk.tiles.slice());mk.tiles=[];mk.gaps=null;render();};
+$('chkBtn').onclick=e=>{mk.chk=!mk.chk;e.target.classList.toggle('on',mk.chk);refreshGaps();render();};
+function alignTrap(q){// rotate vertex order so the long (2-unit) edge is first, keeping the winding
+  for(let i=0;i<4;i++){const a=q[i],b=q[(i+1)%4];if(Math.hypot(b[0]-a[0],b[1]-a[1])>1.5*L)return [0,1,2,3].map(j=>q[(i+j)%4]);}return q;}
+function greedyFill(k,start){// keep adding copies of k edge-to-edge until the page is full
+  if(k==='trap'&&!(start&&start.length)){// two trapeziums make a hexagon
+    const out=[];greedyFill('hex').forEach(h=>{const v=h.p;[[v[0],v[1],v[2],v[3]],[v[3],v[4],v[5],v[0]]].forEach(q=>{const P=[q[3],q[0],q[1],q[2]];/* long edge first */out.push({k,p:alignTrap(q),c:cen(q)});});});return out;}
+  const T=start&&start.length?start.slice():[{k,p:placeAt(k,[W/2,H/2])}];T.forEach(t=>t.c=cen(t.p));
+  for(let ti=0;ti<T.length&&T.length<1000;ti++){const P=T[ti].p;
+    for(let i=0;i<P.length;i++){const v=P[i],w=P[(i+1)%P.length];
+      for(const C of attachOptions(k,v,w,null,0)){const c=cen(C);if(c[0]<-L||c[0]>W+L||c[1]<-L||c[1]>H+L)continue;
+        if(!overlapsAny(C,T)){T.push({k,p:C,c});break;}}}}
+  return T;}
+$('fillBtn').onclick=()=>{mk.hist.push(mk.tiles.slice());mk.tiles=greedyFill(mk.k,mk.tiles.filter(t=>t.k===mk.k).length===mk.tiles.length?mk.tiles:null);refreshGaps();mk.ghost=null;render();};
+
+/* ================= CHECK ================= */
+let ck={k:'pent',n:1,ang:false};
+const CK_KEYS=['tri','sq','hex','rhom','trap','rect','pent','oct','circ'];
+const O=[500,300];
+function renderCheck(){svg.setAttribute('viewBox',`0 0 ${W} ${H}`);const k=ck.k;let s='';$('seeBtn').style.display='none';
+  if(k==='circ'){const r=70,n=Math.min(ck.n,7);const C=[[O[0],O[1]]];for(let i=0;i<6;i++)C.push([O[0]+2*r*Math.cos(i*Math.PI/3),O[1]+2*r*Math.sin(i*Math.PI/3)]);
+    C.slice(0,n).forEach(c=>el('circle',{cx:c[0],cy:c[1],r,fill:SH.circ.c,stroke:'#1f2937','stroke-width':3},svg));
+    if(n>=3)for(let i=1;i<n-1;i++){const a=C[i],b=C[i+1],g=[(O[0]+a[0]+b[0])/3,(O[1]+a[1]+b[1])/3];el('circle',{cx:g[0],cy:g[1],r:9,fill:'#dc2626'},svg);}
+    if(n===7){const a=C[6],b=C[1],g=[(O[0]+a[0]+b[0])/3,(O[1]+a[1]+b[1])/3];el('circle',{cx:g[0],cy:g[1],r:9,fill:'#dc2626'},svg);}
+    s=n<3?'Keep adding circles. Do they fit together with no gaps?':`Look at the red gaps between the circles. However we put them, <b>circles always leave gaps</b>. Circles <b>do not tessellate</b>.`;
+    $('say').innerHTML=s;return;}
+  const P=LOC[k],a=SH[k].ang[0],fit=Math.floor(360/a+1e-6),exact=Math.abs(fit*a-360)<1e-6,n=Math.min(ck.n,fit+(exact?0:1));
+  for(let j=0;j<n;j++){const th=-j*a*Math.PI/180,c=Math.cos(th),sn=Math.sin(th),over=j>=fit;
+    const Q=P.map(v=>[O[0]+v[0]*1.6*c-v[1]*1.6*sn,O[1]+v[0]*1.6*sn+v[1]*1.6*c]);
+    el('polygon',{points:Q.map(v=>v.join(',')).join(' '),fill:over?'#fecaca':SH[k].c,opacity:over?.75:1,stroke:over?'#dc2626':'#1f2937','stroke-width':3,'stroke-dasharray':over?'8 6':'none','stroke-linejoin':'round'},svg);
+    if(ck.ang&&!over){const m=th-a*Math.PI/360;txt(svg,O[0]+48*Math.cos(m),O[1]+48*Math.sin(m)+6,a+'°',17,'#1f2937','800');}}
+  const placed=Math.min(n,fit),rem=360-placed*a;
+  if(placed===fit&&rem>0.5){const a1=-placed*a*Math.PI/180,a2=-2*Math.PI,R=95;
+    el('path',{d:`M${O[0]} ${O[1]}L${O[0]+R*Math.cos(a1)} ${O[1]+R*Math.sin(a1)}A${R} ${R} 0 ${rem>180?1:0} 0 ${O[0]+R*Math.cos(a2)} ${O[1]+R*Math.sin(a2)}Z`,fill:'#dc2626',opacity:.85},svg);
+    const m=(a1+a2)/2;txt(svg,O[0]+175*Math.cos(m),O[1]+175*Math.sin(m)+7,ck.ang?`gap ${Math.round(rem)}°`:'gap',22,'#dc2626','800');}
+  el('circle',{cx:O[0],cy:O[1],r:7,fill:'#1f2937'},svg);
+  const nm=SH[k].n,pl=PL(k);
+  if(placed<fit||(exact&&n<fit))s=`${n} ${n===1?nm:pl} around the point. Keep adding ${pl}. Will they fit all the way around?`;
+  else if(exact){s=`${fit} ${pl} fit exactly around the point, with <b>no gaps and no overlaps</b>. ✓ ${pl[0].toUpperCase()+pl.slice(1)} <b>tessellate</b>!`+(ck.ang?` (${fit} × ${a}° = 360°)`:'');el('circle',{cx:O[0],cy:O[1],r:14,fill:'#16a34a',stroke:'#fff','stroke-width':3},svg);$('seeBtn').style.display='';}
+  else if(n>fit)s=`Another ${nm} would <b>overlap</b>, and without it there is a <b>gap</b>. ${pl[0].toUpperCase()+pl.slice(1)} <b>do not tessellate</b>.`+(k==='oct'?' A square would fit in the gap!':'')+(ck.ang?` (${fit} × ${a}° = ${fit*a}°, leaving ${Math.round(rem)}°)`:'');
+  else s=`${fit} ${pl} leave a <b>gap</b>. Can another one fit? Press ➕ to try.`;
+  $('say').innerHTML=s;}
+$('addBtn').onclick=()=>{ck.n++;render();};
+$('againBtn').onclick=()=>{ck.n=1;render();};
+$('angBtn').onclick=e=>{ck.ang=!ck.ang;e.target.classList.toggle('on',ck.ang);render();};
+$('seeBtn').onclick=()=>{mk.k=ck.k;mk.hist.push(mk.tiles.slice());mk.tiles=greedyFill(ck.k);refreshGaps();setMode('make');};
+
+/* ================= EXPLORE (any triangle / quadrilateral) ================= */
+let shape='tri',V={tri:[[430,300],[560,300],[470,210]],quad:[[440,300],[560,310],[545,220],[450,235]]},drag=null,pair=false,two=true,addSq=false;
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1]],sub=(a,b)=>[a[0]-b[0],a[1]-b[1]],mul=(a,k)=>[a[0]*k,a[1]*k];
+function reg(n,r,c,rot){return Array.from({length:n},(_,i)=>{const a=rot+i*2*Math.PI/n;return [c[0]+r*Math.cos(a),c[1]+r*Math.sin(a)];});}
+function angleAt(P,i){const n=P.length,a=P[(i+n-1)%n],b=P[i],c=P[(i+1)%n],v1=sub(a,b),v2=sub(c,b);let d=Math.atan2(v2[1],v2[0])-Math.atan2(v1[1],v1[0]);d=Math.abs(d*180/Math.PI);return d>180?360-d:d;}
+function tiles(){
+  const out=[];
+  if(shape==='tri'||shape==='quad'){
+    const P=V[shape];let base,rot,t1,t2;
+    if(shape==='tri'){const [A,B,C]=P;base=P;rot=[C,B,sub(add(B,C),A)];t1=sub(B,A);t2=sub(C,A);}
+    else{const [A,B,C,D]=P,M=add(B,C);base=P;rot=P.map(p=>sub(M,p));t1=sub(sub(add(B,C),D),A);t2=sub(C,A);}
+    for(let i=-8;i<=8;i++)for(let j=-8;j<=8;j++){const off=add(mul(t1,i),mul(t2,j));out.push({p:base.map(q=>add(q,off)),c:0,i,j});out.push({p:rot.map(q=>add(q,off)),c:1,i,j});}
+  }
+  if(shape==='sq'){const s=80;for(let i=-8;i<=8;i++)for(let j=-6;j<=6;j++){const x=460+i*s,y=240+j*s;out.push({p:[[x,y],[x+s,y],[x+s,y+s],[x,y+s]],c:(i+j+100)%2,i,j});}}
+  if(shape==='hex'){const r=55;for(let i=-8;i<=8;i++)for(let j=-8;j<=8;j++){const c=[500+i*1.5*r,280+j*Math.sqrt(3)*r+(Math.abs(i)%2)*Math.sqrt(3)*r/2];out.push({p:reg(6,r,c,0),c:(i+100)%3,i,j});}}
+  if(shape==='pent'){const r=90,c0=[500,300];
+    const v=reg(5,r,c0,-Math.PI/2)[2];for(let k=0;k<3;k++){const ang=k*108*Math.PI/180;const P=reg(5,r,c0,-Math.PI/2).map(p=>{const d=sub(p,v);return add(v,[d[0]*Math.cos(ang)-d[1]*Math.sin(ang),d[0]*Math.sin(ang)+d[1]*Math.cos(ang)]);});out.push({p:P,c:k%2,i:k,j:0});}}
+  if(shape==='oct'){const s=60,r=s/(2*Math.sin(Math.PI/8)),step=s+2*s/Math.SQRT2;for(let i=-6;i<=6;i++)for(let j=-5;j<=5;j++){const c=[500+i*step,280+j*step];out.push({p:reg(8,r,c,Math.PI/8),c:(i+j+100)%2,i,j});
+      if(addSq){const h=step/2,sc=[c[0]+h,c[1]+h],d=s/Math.SQRT2;out.push({p:[[sc[0],sc[1]-d],[sc[0]+d,sc[1]],[sc[0],sc[1]+d],[sc[0]-d,sc[1]]],c:2,i,j,sq:true});}}}
+  const cx=500,cy=280;out.forEach(t=>{const m=t.p.reduce((a,b)=>add(a,b),[0,0]);t.d=Math.hypot(m[0]/t.p.length-cx,m[1]/t.p.length-cy);});
+  return out.filter(t=>t.p.some(([x,y])=>x>-60&&x<1060&&y>-60&&y<620)).sort((a,b)=>a.d-b.d);
+}
+function renderExplore(){
+  svg.setAttribute('viewBox','0 0 1000 560');const T=tiles(),n=Math.min(T.length,+$('count').value);
+  const COLS=two?['#60a5fa','#fbbf24','#f472b6']:['#60a5fa','#60a5fa','#60a5fa'];
+  T.slice(0,n).forEach(t=>el('polygon',{points:t.p.map(q=>q.join(',')).join(' '),fill:t.sq?'#a3e635':COLS[t.c],stroke:'#1f2937','stroke-width':2,'stroke-linejoin':'round',opacity:pair&&!(t.i===0&&t.j===0)?.35:1},svg));
+  if(shape==='tri'||shape==='quad'){el('polygon',{points:V[shape].map(q=>q.join(',')).join(' '),fill:'none',stroke:'#111827','stroke-width':4,'pointer-events':'none'},svg);V[shape].forEach((p,i)=>{const h=el('circle',{cx:p[0],cy:p[1],r:11,fill:'#f97316',stroke:'#fff','stroke-width':3,style:'cursor:grab'},svg);h.addEventListener('pointerdown',e=>{drag=i;svg.setPointerCapture(e.pointerId);e.preventDefault();});});}
+  let s='';
+  if(shape==='tri'){const P=V.tri,a=P.map((_,i)=>Math.round(angleAt(P,i)));s=`Any triangle tessellates. Two copies (one turned a half turn) make a <b>parallelogram</b>, and parallelograms slide to fill the plane. Angles: ${a.join('° + ')}° = 180°. At every corner, 6 angles meet: 2 of each, making 360°.`;}
+  if(shape==='quad'){const P=V.quad,a=P.map((_,i)=>Math.round(angleAt(P,i)));s=`Any quadrilateral tessellates! Its angles ${a.join('° + ')}° add to 360°, and all four meet at each corner.`;}
+  if(shape==='sq')s='Squares tessellate: 4 right angles (4 × 90° = 360°) meet at every corner.';
+  if(shape==='hex')s='Regular hexagons tessellate: 3 angles of 120° meet at every corner (3 × 120° = 360°). Bees use this pattern!';
+  if(shape==='pent')s='Regular pentagons <b>do not</b> tessellate. Three angles of 108° make 324°, which leaves a <b>36° gap</b>, and a fourth pentagon would overlap.';
+  if(shape==='oct')s=addSq?'Octagons and squares together tessellate: 135° + 135° + 90° = 360° at each corner.':'Regular octagons alone <b>do not</b> tessellate: they leave square-shaped gaps (135° + 135° = 270°, so 90° is missing). Press "Add squares to fill the gaps".';
+  $('say').innerHTML=s;
+  if(shape==='pent'){const c=reg(5,90,[500,300],-Math.PI/2)[2];el('circle',{cx:c[0],cy:c[1],r:8,fill:'#dc2626'},svg);txt(svg,c[0]+14,c[1]+34,'gap!',20,'#dc2626','800','start');}
+}
+svg.addEventListener('pointermove',e=>{if(mode!=='explore'||drag===null)return;const p=pt(svg,e);V[shape][drag]=[Math.max(250,Math.min(750,p.x)),Math.max(120,Math.min(440,p.y))];render();});
+svg.addEventListener('pointerup',()=>{drag=null;});
+$('count').oninput=render;
+$('pairBtn').onclick=e=>{pair=!pair;e.target.classList.toggle('on',pair);render();};
+$('colBtn').onclick=e=>{two=!two;e.target.classList.toggle('on',two);render();};
+$('sqBtn').onclick=e=>{addSq=!addSq;e.target.classList.toggle('on',addSq);render();};
+document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{shape=b.dataset.s;document.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('on',x===b));$('sqBtn').style.display=shape==='oct'?'':'none';$('pairBtn').style.display=shape==='tri'||shape==='quad'?'':'none';$('count').max=shape==='pent'?3:200;$('count').value=$('count').max;render();});
+
+/* ================= modes ================= */
+function render(){svg.innerHTML='';if(mode==='make')renderMake();else if(mode==='check')renderCheck();else renderExplore();}
+function setMode(m){mode=m;document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('on',x.dataset.mode===m));
+  $('makeBar').style.display=$('makeBar2').style.display=m==='make'?'flex':'none';
+  $('checkBar').style.display=$('checkBar2').style.display=m==='check'?'flex':'none';
+  $('exBar1').style.display=$('exBar2').style.display=m==='explore'?'flex':'none';
+  $('hint').textContent=HINTS[m];
+  shapeButtons($('mkShapes'),MK_KEYS,()=>mk.k,k=>{mk.k=k;mk.turn=0;mk.ghost=null;render();});
+  shapeButtons($('ckShapes'),CK_KEYS,()=>ck.k,k=>{ck.k=k;ck.n=1;render();});
+  render();}
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+setMode('make');
+</script></body></html>

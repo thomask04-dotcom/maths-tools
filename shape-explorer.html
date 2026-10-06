@@ -16,16 +16,40 @@ button.on{background:#2563eb;border-color:#2563eb;color:#fff}
 #info .muted{color:#64748b;font-size:14px}
 svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
 .hint{font-size:13px;color:#6b7280;padding:6px 10px}
+.mode button{font-size:16px;font-weight:600}
+#say{font-size:19px;padding:8px 14px;min-height:60px;line-height:1.5}
+#say table{border-collapse:collapse;font-size:16px;margin-top:4px}
+#say td,#say th{border:1px solid #e5e7eb;padding:3px 10px;text-align:center}
+#say th{background:#f1f5f9}
+#svg2{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+#rec{padding:0 14px 8px;font-size:16px}
+#rec svg{width:auto!important;height:auto!important;display:inline-block}
+#rec .r{display:flex;align-items:center;gap:10px;padding:3px 0;border-bottom:1px solid #f1f5f9}
+.sh{display:inline-flex;align-items:center;gap:5px}
+.sh svg{width:24px;height:24px}
 </style></head><body>
-<div class="bar"><span class="title">Triangle & Quadrilateral Explorer</span>
-<button data-k="3" class="on">Triangle</button><button data-k="4">Quadrilateral</button>
+<div class="bar mode"><span class="title">2D Shapes Explorer</span>
+<button data-mode="cmp" class="on">⚖️ Compare &amp; sort</button><button data-mode="comb">🧩 Combine shapes</button><button data-mode="split">✂️ Split shapes</button><button data-mode="ex">📐 Drag the corners</button>
+</div>
+<!-- stage 2 modes -->
+<div id="s2">
+<div class="bar" id="b1"></div>
+<div class="bar" id="b2"></div>
+<div id="say"></div>
+<svg id="svg2" viewBox="0 0 1000 600"></svg>
+<div id="rec"></div>
+<div class="hint" id="hint2"></div>
+</div>
+<div id="exAll" style="display:none">
+<div class="bar"><button data-k="3" class="on">Triangle</button><button data-k="4">Quadrilateral</button>
 <select id="preset"></select>
 </div>
 <div class="bar">
 <button id="lenBtn" class="on">Side lengths</button><button id="angBtn" class="on">Angles</button><button id="symBtn">Lines of symmetry</button><button id="diaBtn">Diagonals</button><button id="snapBtn" class="on">Snap to grid</button>
 </div>
 <div class="wrap"><div id="main"><svg id="svg" viewBox="0 0 760 520"></svg></div><div id="info"></div></div>
-<div class="hint">Drag the corners to change the shape. Tick marks show equal sides, a small square shows a right angle, and arrows show parallel sides. Watch how the name changes. Can you make an isosceles triangle with a right angle?</div>
+<div class="hint" id="exHint">Drag the corners to change the shape. Tick marks show equal sides, a small square shows a right angle, and arrows show parallel sides. Watch how the name changes. Can you make an isosceles triangle with a right angle?</div>
+</div>
 <script>
 const NS='http://www.w3.org/2000/svg';
 function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
@@ -109,4 +133,195 @@ document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{k=+b.dataset.k;d
 [['lenBtn','len'],['angBtn','ang'],['symBtn','sym'],['diaBtn','dia']].forEach(([id,key])=>$(id).onclick=e=>{show[key]=!show[key];e.target.classList.toggle('on',show[key]);render();});
 $('snapBtn').onclick=e=>{snap=!snap;e.target.classList.toggle('on',snap);};
 presets();render();
+/* ===================== Stage 2: compare, sort, combine, split ===================== */
+const svg2=$('svg2');let mode='cmp';
+const V=(a,b)=>[b[0]-a[0],b[1]-a[1]],Ln=v=>Math.hypot(v[0],v[1]),Cr=(a,b)=>a[0]*b[1]-a[1]*b[0],Dt=(a,b)=>a[0]*b[0]+a[1]*b[1];
+const centroid=P=>P.reduce((q,b)=>[q[0]+b[0]/P.length,q[1]+b[1]/P.length],[0,0]);
+function area(P){let a=0;P.forEach((p,i)=>{const q=P[(i+1)%P.length];a+=p[0]*q[1]-q[0]*p[1];});return a/2;}
+function clean(P){let Q=P.filter((p,i)=>Ln(V(p,P[(i+1)%P.length]))>1e-6),ch=true;
+  while(ch&&Q.length>3){ch=false;for(let i=0;i<Q.length;i++){const a=Q[(i+Q.length-1)%Q.length],b=Q[i],c=Q[(i+1)%Q.length];if(Math.abs(Cr(V(a,b),V(b,c)))<1e-6){Q.splice(i,1);ch=true;break;}}}return Q;}
+function feat(P){const n=P.length,s=P.map((p,i)=>Ln(V(p,P[(i+1)%n]))),
+  a=P.map((p,i)=>{const u=V(p,P[(i+n-1)%n]),w=V(p,P[(i+1)%n]);return Math.acos(Math.max(-1,Math.min(1,Dt(u,w)/(Ln(u)*Ln(w)))))*180/Math.PI;}),
+  E=(x,y)=>Math.abs(x-y)<1e-6*Math.max(x,y)+1e-9,R=x=>Math.abs(x-90)<0.5,pairs=[];
+  for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){const u=V(P[i],P[(i+1)%n]),w=V(P[j],P[(j+1)%n]);if(Math.abs(Cr(u,w))<1e-6*Ln(u)*Ln(w))pairs.push([i,j]);}
+  return {n,s,a,pairs,E,R,allEq:s.every(x=>E(x,s[0])),rights:a.filter(R).length};}
+function shapeName(P){const f=feat(P),{n,s,pairs,allEq,rights,E}=f;
+  if(n===3)return rights?'right-angled triangle':(E(s[0],s[1])||E(s[1],s[2])||E(s[0],s[2]))?(allEq?'equilateral triangle':'isosceles triangle'):'triangle';
+  if(n===4){if(allEq&&rights===4)return 'square';if(rights===4)return 'rectangle';if(allEq)return 'rhombus';if(pairs.length>=2)return 'parallelogram';
+    if((E(s[0],s[1])&&E(s[2],s[3]))||(E(s[1],s[2])&&E(s[3],s[0])))return 'kite';if(pairs.length===1)return 'trapezium';return 'quadrilateral';}
+  return ({5:'pentagon',6:'hexagon',7:'heptagon',8:'octagon'})[n]||n+'-sided shape';}
+const plural=w=>w.endsWith('us')?w+'es':w+'s',art=w=>/^[aeiou]/.test(w)?'an '+w:'a '+w;
+function countText(names){const m={};names.forEach(n=>m[n]=(m[n]||0)+1);const parts=Object.entries(m).map(([n,c])=>c===1?'1 '+n:c+' '+plural(n));return parts.length>1?parts.slice(0,-1).join(', ')+' and '+parts[parts.length-1]:parts[0]||'';}
+function inPoly(P,x,y){let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const a=P[i],b=P[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;}
+function onSeg(p,a,b){return Math.abs(Cr(V(a,b),V(a,p)))<1e-6&&Dt(V(a,p),V(b,p))<=1e-9;}
+function poly(g,Q,a){return el('polygon',Object.assign({points:Q.map(p=>p.join(',')).join(' '),'stroke-linejoin':'round'},a),g);}
+// marks: equal sides (ticks), parallel sides (arrows), right angles (squares) - Q in screen coords
+function marks(g,Q,o,sz){sz=sz||1;const n=Q.length,f=feat(Q);
+  if(o.eq){const G=[];f.s.forEach((v,i)=>{const x=G.find(x=>f.E(f.s[x[0]],v));x?x.push(i):G.push([i]);});let t=1;
+    G.filter(x=>x.length>1).forEach(x=>{x.forEach(i=>{const A=Q[i],B=Q[(i+1)%n],m=[(A[0]+B[0])/2,(A[1]+B[1])/2],d=V(A,B),L=Ln(d),u=[d[0]/L,d[1]/L],nn=[-u[1],u[0]];
+      for(let k=0;k<t;k++){const o2=(k-(t-1)/2)*6*sz;el('line',{x1:m[0]+u[0]*o2-nn[0]*7*sz,y1:m[1]+u[1]*o2-nn[1]*7*sz,x2:m[0]+u[0]*o2+nn[0]*7*sz,y2:m[1]+u[1]*o2+nn[1]*7*sz,stroke:'#1f2937','stroke-width':2.2,'pointer-events':'none'},g);}});t++;});}
+  if(o.par){const G=[];for(let i=0;i<n;i++){const u=V(Q[i],Q[(i+1)%n]);const x=G.find(x=>{const w=V(Q[x[0]],Q[(x[0]+1)%n]);return Math.abs(Cr(u,w))<1e-6*Ln(u)*Ln(w);});x?x.push(i):G.push([i]);}
+    let t=1;G.filter(x=>x.length>1).forEach(x=>{const r=V(Q[x[0]],Q[(x[0]+1)%n]);x.forEach(i=>{const A=Q[i],B=Q[(i+1)%n],d=V(A,B),L=Ln(d),dir=Dt(d,r)<0?-1:1,u=[d[0]/L*dir,d[1]/L*dir],nn=[-u[1],u[0]],m=[(A[0]+B[0])/2+u[0]*(o.eq?14:0)*sz,(A[1]+B[1])/2+u[1]*(o.eq?14:0)*sz];
+      for(let k=0;k<t;k++){const q=[m[0]+u[0]*k*7*sz,m[1]+u[1]*k*7*sz];el('path',{d:`M${q[0]-u[0]*7*sz+nn[0]*6*sz} ${q[1]-u[1]*7*sz+nn[1]*6*sz}L${q[0]} ${q[1]}L${q[0]-u[0]*7*sz-nn[0]*6*sz} ${q[1]-u[1]*7*sz-nn[1]*6*sz}`,fill:'none',stroke:'#16a34a','stroke-width':2.6,'pointer-events':'none'},g);}});t++;});}
+  if(o.rt)Q.forEach((p,i)=>{if(!f.R(f.a[i]))return;const A=Q[(i+n-1)%n],B=Q[(i+1)%n],e1=V(p,A),e2=V(p,B),l1=Ln(e1),l2=Ln(e2),r=11*sz,a=[e1[0]/l1*r,e1[1]/l1*r],b=[e2[0]/l2*r,e2[1]/l2*r];
+    el('path',{d:`M${p[0]+a[0]} ${p[1]+a[1]}L${p[0]+a[0]+b[0]} ${p[1]+a[1]+b[1]}L${p[0]+b[0]} ${p[1]+b[1]}`,fill:'none',stroke:'#dc2626','stroke-width':2.4,'pointer-events':'none'},g);});}
+function thumb(polys,cols){const xs=polys.flat().map(p=>p[0]),ys=polys.flat().map(p=>p[1]),x0=Math.min(...xs),y0=Math.min(...ys),w=Math.max(...xs)-x0||1,h=Math.max(...ys)-y0||1,k=Math.min(80/w,50/h);
+  return `<svg width="${w*k+8}" height="${h*k+8}" viewBox="-4 -4 ${w*k+8} ${h*k+8}">`+polys.map((P,i)=>`<polygon points="${P.map(p=>[(p[0]-x0)*k,(p[1]-y0)*k].join(',')).join(' ')}" fill="${cols[i]}" stroke="#1f2937" stroke-width="1.5"/>`).join('')+'</svg>';}
+const recs={comb:[],split:[]};
+function renderRec(){const R=recs[mode]||[];$('rec').innerHTML=R.length?'<b>Our recording</b>'+R.map(r=>`<div class="r">${r.img}<span>${r.t}</span></div>`).join(''):'';}
+
+/* ---------- COMPARE & SORT ---------- */
+const GAL=[['square',[[0,0],[3,0],[3,3],[0,3]]],['rectangle',[[0,0],[5,0],[5,3],[0,3]]],['rhombus',[[0,2],[3,0],[6,2],[3,4]]],['parallelogram',[[2,0],[6,0],[4,3],[0,3]]],
+  ['trapezium',[[1,0],[4,0],[6,3],[0,3]]],['kite',[[2,0],[4,2],[2,6],[0,2]]],['square (turned)',[[2,0],[4,2],[2,4],[0,2]]],['trapezium',[[0,0],[3,0],[5,3],[0,3]]],
+  ['quadrilateral',[[0,1],[4,0],[5,3],[1,4]]],['triangle',[[0,0],[4,3],[0,3]]],['pentagon',[[0,2],[2,0],[4,2],[4,5],[0,5]]],['hexagon',[[1,0],[3,0],[4,2],[3,4],[1,4],[0,2]]]];
+const ATTR={four:{y:'4 sides',n:'Not 4 sides',q:'have 4 sides (quadrilaterals)',f:F=>F.n===4},par:{y:'Parallel sides',n:'No parallel sides',q:'have parallel sides',f:F=>F.pairs.length>0},
+  par2:{y:'2 pairs of parallel sides',n:'Not 2 pairs of parallel sides',q:'have 2 pairs of parallel sides',f:F=>F.pairs.length>=2},allEq:{y:'All sides equal',n:'Sides not all equal',q:'have all sides equal',f:F=>F.allEq},
+  rt:{y:'Has a right angle',n:'No right angles',q:'have a right angle',f:F=>F.rights>0},allR:{y:'4 right angles',n:'Not 4 right angles',q:'have 4 right angles',f:F=>F.n===4&&F.rights===4},
+  opp:{y:'Opposite sides equal',n:'Opposite sides not equal',q:'have opposite sides equal',f:F=>F.n===4&&F.E(F.s[0],F.s[2])&&F.E(F.s[1],F.s[3])}};
+let cm={show:{eq:true,par:true,rt:true,nm:true},sel:[],a1:'',a2:'',game:null};
+function describe(i){const [nm,P]=GAL[i],F=feat(P);const pp=F.pairs.length;return `<b>${cap(nm)}</b>: ${F.n} sides, ${pp?pp+' pair'+(pp>1?'s':'')+' of parallel sides':'no parallel sides'}, ${F.allEq?'all sides equal':ATTR.opp.f(F)?'opposite sides equal':'sides not all equal'}, ${F.rights?F.rights+' right angle'+(F.rights>1?'s':''):'no right angles'}.`;}
+function compareTable(i,j){const A=feat(GAL[i][1]),B=feat(GAL[j][1]),rows=[['Number of sides',F=>F.n],['Pairs of parallel sides',F=>F.pairs.length],['All sides equal?',F=>F.allEq?'yes':'no'],['Opposite sides equal?',F=>ATTR.opp.f(F)?'yes':'no'],['Right angles',F=>F.rights]];
+  const same=[],diff=[];let h=`<table><tr><th></th><th>${cap(GAL[i][0])}</th><th>${cap(GAL[j][0])}</th><th></th></tr>`;
+  rows.forEach(([t,f])=>{const a=f(A),b=f(B),s=a===b;(s?same:diff).push(t.replace('?','').toLowerCase());h+=`<tr><td style="text-align:left">${t}</td><td>${a}</td><td>${b}</td><td>${s?'✓ same':'✗ different'}</td></tr>`;});
+  return `Comparing the <b>${GAL[i][0]}</b> and the <b>${GAL[j][0]}</b>:`+h+'</table>';}
+function cmpBars(){$('b1').innerHTML='<span>Show:</span>'+[['eq','Equal sides'],['par','Parallel sides'],['rt','Right angles'],['nm','Names']].map(([k,t])=>`<button data-sh="${k}" class="${cm.show[k]?'on':''}">${t}</button>`).join('');
+  const opts=sel=>'<option value="">—</option>'+Object.entries(ATTR).map(([k,a])=>`<option value="${k}" ${sel===k?'selected':''}>${a.y}</option>`).join('');
+  $('b2').innerHTML=`<span>Group by:</span><select id="a1">${opts(cm.a1)}</select><span>and</span><select id="a2">${opts(cm.a2)}</select><button id="findBtn">🎯 Find them</button><button id="chkBtn" style="display:${cm.game&&!cm.game.done?'':'none'}">✓ Check</button>`;
+  document.querySelectorAll('[data-sh]').forEach(b=>b.onclick=()=>{cm.show[b.dataset.sh]=!cm.show[b.dataset.sh];b.classList.toggle('on');draw();});
+  $('a1').onchange=e=>{cm.a1=e.target.value;cm.game=null;cmpBars();draw();};$('a2').onchange=e=>{cm.a2=e.target.value;cm.game=null;cmpBars();draw();};
+  $('findBtn').onclick=()=>{const ks=['par','allEq','rt','par2','allR','opp'];let k;do{k=ks[Math.floor(Math.random()*ks.length)];}while(cm.game&&cm.game.k===k);cm.game={k,pick:new Set(),done:false};cm.a1=cm.a2='';cm.sel=[];cmpBars();draw();};
+  $('chkBtn').onclick=()=>{cm.game.done=true;cmpBars();draw();};}
+function card(g,i,x,y,w,h){const [nm,P]=GAL[i],xs=P.map(p=>p[0]),ys=P.map(p=>p[1]),bw=Math.max(...xs)-Math.min(...xs),bh=Math.max(...ys)-Math.min(...ys),k=Math.min((w-34)/bw,(h-(cm.show.nm?50:30))/bh,26);
+  const Q=P.map(p=>[x+w/2+(p[0]-Math.min(...xs)-bw/2)*k,y+(h-(cm.show.nm?24:0))/2+(p[1]-Math.min(...ys)-bh/2)*k]);
+  const G=cm.game,F=feat(P);let stroke='#e2e8f0',fill='#fff',badge='';
+  if(cm.sel.includes(i)){stroke='#2563eb';fill='#eff6ff';}
+  if(G){const yes=ATTR[G.k].f(F),p=G.pick.has(i);if(p){stroke='#2563eb';fill='#eff6ff';}if(G.done){if(p&&yes){stroke='#16a34a';fill='#f0fdf4';badge='✓';}else if(p){stroke='#dc2626';fill='#fef2f2';badge='✗';}else if(yes){stroke='#f59e0b';fill='#fffbeb';badge='missed';}}}
+  const c=el('g',{style:'cursor:pointer'},g);el('rect',{x:x+3,y:y+3,width:w-6,height:h-6,rx:12,fill,stroke,'stroke-width':3},c);
+  poly(c,Q,{fill:'#bfdbfe',stroke:'#1e3a8a','stroke-width':2.5});marks(c,Q,cm.show,.9);
+  if(cm.show.nm)txt(c,x+w/2,y+h-12,nm,15,'#334155','700');if(badge)txt(c,x+w-22,y+24,badge,badge.length>1?13:20,stroke,'800');
+  c.addEventListener('pointerdown',()=>{if(G){if(G.done)return;G.pick.has(i)?G.pick.delete(i):G.pick.add(i);}else{cm.sel=cm.sel.includes(i)?cm.sel.filter(x=>x!==i):cm.sel.concat(i).slice(-2);}draw();});}
+function drawCmp(){const g=svg2;let say='';
+  if(!cm.a1&&!cm.a2){const w=1000/6,h=170;GAL.forEach((_,i)=>card(g,i,(i%6)*w,10+Math.floor(i/6)*h,w,h));svg2.setAttribute('viewBox','0 0 1000 '+(2*h+20));}
+  else{const A=[cm.a1,cm.a2].filter(Boolean),cols=A.length===2?[[true,'y'],[false,'n']]:[[true,'y'],[false,'n']],w=150,h=135;
+    const cell=(v1,v2)=>GAL.map((x,i)=>i).filter(i=>{const F=feat(GAL[i][1]);return ATTR[A[0]].f(F)===v1&&(A.length<2||ATTR[A[1]].f(F)===v2);});
+    const per=3,boxW=470,x0=[40,520];
+    if(A.length===1){let H=0;[true,false].forEach((v,c)=>{const L=cell(v),rows=Math.max(1,Math.ceil(L.length/per));H=Math.max(H,rows*h);});
+      [true,false].forEach((v,c)=>{const L=cell(v);el('rect',{x:x0[c],y:40,width:boxW,height:H+20,rx:16,fill:v?'#f0fdf4':'#fef2f2',stroke:v?'#16a34a':'#dc2626','stroke-width':2.5},g);
+        txt(g,x0[c]+boxW/2,28,(v?'✓ ':'✗ ')+ATTR[A[0]][v?'y':'n'],20,v?'#166534':'#991b1b','800');L.forEach((i,j)=>card(g,i,x0[c]+10+(j%per)*w,50+Math.floor(j/per)*h,w,h));});
+      svg2.setAttribute('viewBox',`0 0 1000 ${H+80}`);say=`Grouped by <b>${ATTR[A[0]].y.toLowerCase()}</b>. Tap shapes to describe and compare them.`;}
+    else{let y=40;txt(g,x0[0]+boxW/2,24,'✓ '+ATTR[A[0]].y,19,'#166534','800');txt(g,x0[1]+boxW/2,24,'✗ '+ATTR[A[0]].n,19,'#991b1b','800');
+      [true,false].forEach(v2=>{const H=Math.max(1,...[true,false].map(v1=>Math.ceil(cell(v1,v2).length/per)))*h;
+        const lab=el('text',{x:22,y:y+H/2,'font-size':17,'font-weight':800,fill:v2?'#166534':'#991b1b','text-anchor':'middle',transform:`rotate(-90 22 ${y+H/2})`},g);lab.textContent=(v2?'✓ ':'✗ ')+ATTR[A[1]][v2?'y':'n'];
+        [true,false].forEach((v1,c)=>{el('rect',{x:x0[c],y,width:boxW,height:H+10,rx:14,fill:'#f8fafc',stroke:'#94a3b8','stroke-width':2},g);cell(v1,v2).forEach((i,j)=>card(g,i,x0[c]+10+(j%per)*w,y+5+Math.floor(j/per)*h,w,h));});y+=H+20;});
+      svg2.setAttribute('viewBox',`0 0 1000 ${y+10}`);say=`Grouped by <b>${ATTR[A[0]].y.toLowerCase()}</b> and <b>${ATTR[A[1]].y.toLowerCase()}</b>. Which shapes have both?`;}}
+  if(cm.game){const G=cm.game,yes=GAL.map((_,i)=>i).filter(i=>ATTR[G.k].f(feat(GAL[i][1])));
+    if(!G.done)say=`🎯 Tap all the shapes that <b>${ATTR[G.k].q}</b>. Then press ✓ Check.`;
+    else{const right=[...G.pick].filter(i=>yes.includes(i)).length,wrong=G.pick.size-right;say=`You found <b>${right} of ${yes.length}</b> shapes that ${ATTR[G.k].q}.`+(wrong?` ${wrong} chosen shape${wrong>1?'s don\'t':' doesn\'t'} (✗).`:'')+(right===yes.length&&!wrong?' 🎉 Perfect!':' Look at the shapes marked "missed".')+' Press 🎯 for another.';}}
+  else if(cm.sel.length===1)say=describe(cm.sel[0])+' <span style="color:#64748b">Tap another shape to compare.</span>';
+  else if(cm.sel.length===2)say=compareTable(cm.sel[0],cm.sel[1]);
+  else if(!say)say='Tap a shape to describe it. Tap two shapes to <b>compare</b> them. Use "Group by" to sort the shapes using one or two features.';
+  $('say').innerHTML=say;}
+
+/* ---------- COMBINE ---------- */
+const U=40;
+const PCS={sq:{p:[[0,0],[2,0],[2,2],[0,2]],c:'#fb923c'},rect:{p:[[0,0],[4,0],[4,2],[0,2]],c:'#c084fc'},rt:{p:[[0,0],[2,2],[0,2]],c:'#4ade80'},rt2:{p:[[0,0],[4,2],[0,2]],c:'#22d3ee'},
+  iso:{p:[[1,0],[2,2],[0,2]],c:'#facc15'},par:{p:[[1,0],[3,0],[2,2],[0,2]],c:'#60a5fa'},trap:{p:[[1,0],[3,0],[4,2],[0,2]],c:'#f87171'}};
+const CH=[{t:'a square using 2 triangles',P:[[0,0],[2,0],[2,2],[0,2]],use:['rt','rt']},{t:'a rectangle using 2 squares',P:[[0,0],[4,0],[4,2],[0,2]],use:['sq','sq']},
+  {t:'a rectangle using 2 triangles',P:[[0,0],[4,0],[4,2],[0,2]],use:['rt2','rt2']},{t:'a parallelogram using 2 triangles',P:[[2,0],[4,0],[2,2],[0,2]],use:['rt','rt']},
+  {t:'a trapezium using 3 triangles',P:[[1,0],[5,0],[6,2],[0,2]],use:['iso','iso','iso']},{t:'a big triangle using 4 triangles',P:[[2,0],[4,4],[0,4]],use:['iso','iso','iso','iso']},
+  {t:'a big square using 4 squares',P:[[0,0],[4,0],[4,4],[0,4]],use:['sq','sq','sq','sq']},{t:'a rectangle using a square and 2 triangles',P:[[0,0],[4,0],[4,2],[0,2]],use:['sq','rt','rt']},
+  {t:'a trapezium using a rectangle and 2 triangles',P:[[2,0],[6,0],[8,2],[0,2]],use:['rect','rt','rt']},{t:'a hexagon using a rectangle and 2 triangles',P:[[0,1],[2,0],[6,0],[8,1],[6,2],[2,2]],use:['rect','iso','iso']},
+  {t:'a parallelogram using a rectangle and 2 triangles',P:[[2,0],[8,0],[6,2],[0,2]],use:['rect','rt','rt']},{t:'your own shape or design (free play)',P:null,use:[]}];
+CH[4].P=[[1,0],[3,0],[4,2],[0,2]];// 3 isosceles triangles
+let cb={ch:0,pcs:[],sel:-1,drag:null,ok:false},TX=14,TY=4;
+const pw=p=>p.v.map(v=>[v[0]+p.x,v[1]+p.y]);
+function spot(){for(let y=1;y<14;y+=3)for(let x=1;x<12;x+=5){if(!cb.pcs.some(p=>Math.abs(p.x-x)<3&&Math.abs(p.y-y)<2))return [x,y];}return [1,1];}
+function addPiece(k){const [x,y]=spot();cb.pcs.push({k,v:PCS[k].p.map(q=>q.slice()),x,y});cb.sel=cb.pcs.length-1;}
+function norm(v){const mx=Math.min(...v.map(p=>p[0])),my=Math.min(...v.map(p=>p[1]));return v.map(p=>[p[0]-mx,p[1]-my]);}
+function turn(p){const w0=Math.max(...p.v.map(q=>q[0])),h0=Math.max(...p.v.map(q=>q[1]));p.v=norm(p.v.map(q=>[-q[1],q[0]]));const w1=Math.max(...p.v.map(q=>q[0])),h1=Math.max(...p.v.map(q=>q[1]));p.x+=Math.round((w0-w1)/2);p.y+=Math.round((h0-h1)/2);}
+function flip(p){p.v=norm(p.v.map(q=>[-q[0],q[1]]).reverse());}
+function chkComb(){const C=CH[cb.ch];if(!C.P)return null;const T=C.P.map(p=>[p[0]+TX,p[1]+TY]),xs=T.map(p=>p[0]),ys=T.map(p=>p[1]);
+  const W=cb.pcs.map(pw),used=new Set();let missing=0,over=0,out=0;
+  for(let x=Math.min(...xs);x<Math.max(...xs);x+=.25)for(let y=Math.min(...ys);y<Math.max(...ys);y+=.25){const px=x+.13,py=y+.11;if(!inPoly(T,px,py))continue;let c=0;W.forEach((P,i)=>{if(inPoly(P,px,py)){c++;used.add(i);}});if(!c)missing++;if(c>1)over++;}
+  used.forEach(i=>{const P=W[i],xs=P.map(p=>p[0]),ys=P.map(p=>p[1]);for(let x=Math.min(...xs);x<Math.max(...xs);x+=.25)for(let y=Math.min(...ys);y<Math.max(...ys);y+=.25){const px=x+.13,py=y+.11;if(inPoly(P,px,py)&&!inPoly(T,px,py))out++;}});
+  return {used:[...used],missing,over,out,ok:!missing&&!over&&!out&&used.size>0};}
+function combBars(){$('b1').innerHTML='<span>Make:</span><select id="chSel">'+CH.map((c,i)=>`<option value="${i}" ${i===cb.ch?'selected':''}>${cap(c.t)}</option>`).join('')+'</select><span>Add:</span>'+
+    Object.keys(PCS).map(k=>`<button class="sh" data-pc="${k}" title="${shapeName(PCS[k].p)}">${thumb([PCS[k].p],[PCS[k].c]).replace('<svg ','<svg style="width:26px;height:22px" ')}</button>`).join('');
+  $('b2').innerHTML='<button id="tnBtn">↻ Turn</button><button id="flBtn">⇋ Flip</button><button id="dlBtn">🗑 Remove</button><button id="cbClr">Clear</button><button id="cbRec">📝 Record</button>';
+  $('chSel').onchange=e=>{cb.ch=+e.target.value;cb.pcs=[];CH[cb.ch].use.forEach(addPiece);cb.sel=-1;draw();};
+  document.querySelectorAll('[data-pc]').forEach(b=>b.onclick=()=>{addPiece(b.dataset.pc);draw();});
+  $('tnBtn').onclick=()=>{if(cb.pcs[cb.sel]){turn(cb.pcs[cb.sel]);draw();}};$('flBtn').onclick=()=>{if(cb.pcs[cb.sel]){flip(cb.pcs[cb.sel]);draw();}};
+  $('dlBtn').onclick=()=>{if(cb.pcs[cb.sel]){cb.pcs.splice(cb.sel,1);cb.sel=-1;draw();}};$('cbClr').onclick=()=>{cb.pcs=[];cb.sel=-1;draw();};
+  $('cbRec').onclick=()=>{const C=CH[cb.ch],r=chkComb();let P=cb.pcs;if(C.P){if(!r||!r.ok){$('say').innerHTML='Finish the shape first, then record it.';return;}P=r.used.map(i=>cb.pcs[i]);}if(!P.length)return;
+    const names=P.map(p=>shapeName(pw(p)));recs.comb.push({img:thumb(P.map(pw),P.map(p=>PCS[p.k].c)),t:C.P?`${cap(art(shapeName(C.P)))} made from ${countText(names)}.`:`A design made from ${countText(names)}.`});renderRec();};}
+function drawComb(){svg2.setAttribute('viewBox','0 0 1000 600');const g=svg2;
+  for(let x=0;x<=25;x++)for(let y=0;y<=15;y++)el('circle',{cx:x*U,cy:y*U,r:1.8,fill:'#cbd5e1'},g);
+  const C=CH[cb.ch],r=chkComb();
+  if(C.P){const T=C.P.map(p=>[(p[0]+TX)*U,(p[1]+TY)*U]);poly(g,T,{fill:r&&r.ok?'#dcfce7':'#f1f5f9',stroke:r&&r.ok?'#16a34a':'#475569','stroke-width':3,'stroke-dasharray':'9 6'});
+    txt(g,(TX+4)*U,(TY-1)*U+8,'Make '+C.t.split(' using')[0]+' here',18,'#475569','700');}
+  cb.pcs.forEach((p,i)=>{const Q=pw(p).map(q=>[q[0]*U,q[1]*U]),s=el('g',{style:'cursor:grab'},g);poly(s,Q,{fill:PCS[p.k].c,'fill-opacity':.92,stroke:i===cb.sel?'#1d4ed8':'#1f2937','stroke-width':i===cb.sel?4.5:2.5});
+    s.addEventListener('pointerdown',e=>{const q=pt(svg2,e);cb.sel=i;cb.drag={i,dx:q.x/U-p.x,dy:q.y/U-p.y};svg2.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();draw();});});
+  let say;
+  if(!C.P)say='Free play: add shapes, then drag, turn and flip them to make your own shape or design. Press 📝 Record to describe it.';
+  else if(r.ok){say=`✓ You made ${art(shapeName(C.P))} from <b>${countText(r.used.map(i=>shapeName(pw(cb.pcs[i]))))}</b>! Press 📝 Record. Can you make it a different way?`;}
+  else if(r.over)say='Some pieces <b>overlap</b>. Move them so they fit side by side.';
+  else if(r.out)say='A piece is <b>sticking out</b> of the outline.';
+  else say=`Make <b>${C.t}</b>. Drag the pieces into the outline. Tap a piece, then use ↻ Turn or ⇋ Flip.`;
+  $('say').innerHTML=say;}
+svg2.addEventListener('pointermove',e=>{if(mode!=='comb'||!cb.drag)return;const q=pt(svg2,e),p=cb.pcs[cb.drag.i];p.x=q.x/U-cb.drag.dx;p.y=q.y/U-cb.drag.dy;draw();});
+svg2.addEventListener('pointerup',()=>{if(mode!=='comb'||!cb.drag)return;const p=cb.pcs[cb.drag.i];p.x=Math.max(0,Math.min(23,Math.round(p.x)));p.y=Math.max(0,Math.min(13,Math.round(p.y)));cb.drag=null;draw();});
+
+/* ---------- SPLIT ---------- */
+const SPS={square:[[0,0],[6,0],[6,6],[0,6]],rectangle:[[0,0],[8,0],[8,4],[0,4]],parallelogram:[[2,0],[8,0],[6,4],[0,4]],trapezium:[[2,0],[6,0],[8,4],[0,4]],
+  rhombus:[[3,0],[6,4],[3,8],[0,4]],kite:[[3,0],[6,3],[3,8],[0,3]],triangle:[[4,0],[8,6],[0,6]],pentagon:[[0,3],[4,0],[8,3],[8,7],[0,7]],hexagon:[[2,0],[6,0],[8,3],[6,6],[2,6],[0,3]]};
+const SU=50,SCOL=['#bfdbfe','#fde68a','#bbf7d0','#fbcfe8','#ddd6fe','#fed7aa','#a5f3fc','#fecaca'];
+let sp={k:'rectangle',pcs:[],hist:[],first:null,apart:false,names:true,cuts:0};
+function spReset(){const P=SPS[sp.k],w=Math.max(...P.map(p=>p[0])),h=Math.max(...P.map(p=>p[1])),ox=Math.round((20-w)/2),oy=Math.round((11.5-h)/2);sp.pcs=[P.map(p=>[p[0]+ox,p[1]+oy])];sp.hist=[];sp.first=null;sp.cuts=0;}
+function onBoundary(q){return sp.pcs.some(P=>P.some((p,i)=>onSeg(q,p,P[(i+1)%P.length])));}
+function segX(A,B,p,q){// intersection of segment AB with segment pq -> point or null
+  const r=V(A,B),d=V(p,q),den=Cr(r,d);if(Math.abs(den)<1e-12)return null;const t=Cr(V(A,p),d)/den,u=Cr(V(A,p),r)/den;
+  return t>-1e-9&&t<1+1e-9&&u>-1e-9&&u<1+1e-9?[A[0]+t*r[0],A[1]+t*r[1],t]:null;}
+function cutPiece(P,A,B){const X=[];P.forEach((p,i)=>{const q=P[(i+1)%P.length],x=segX(A,B,p,q);if(x&&!X.some(y=>Math.hypot(y[0]-x[0],y[1]-x[1])<1e-6))X.push(x);});
+  if(X.length<2)return null;X.sort((a,b)=>a[2]-b[2]);const C=[X[0][0],X[0][1]],D=[X[X.length-1][0],X[X.length-1][1]];if(Ln(V(C,D))<1e-6)return null;
+  const m=[(C[0]+D[0])/2,(C[1]+D[1])/2];if(!inPoly(P,m[0]+1e-5,m[1]+1.3e-5)||!inPoly(P,m[0]-1e-5,m[1]-1.3e-5))return null;
+  const Q=[];P.forEach((p,i)=>{const q=P[(i+1)%P.length];Q.push(p);[C,D].filter(Y=>onSeg(Y,p,q)&&Ln(V(Y,p))>1e-6&&Ln(V(Y,q))>1e-6).sort((Y,Z)=>Ln(V(p,Y))-Ln(V(p,Z))).forEach(Y=>Q.push(Y));});
+  const ia=Q.findIndex(p=>Ln(V(p,C))<1e-6),ib=Q.findIndex(p=>Ln(V(p,D))<1e-6);if(ia<0||ib<0)return null;
+  const p1=[],p2=[];for(let i=ia;;i=(i+1)%Q.length){p1.push(Q[i]);if(i===ib)break;}for(let i=ib;;i=(i+1)%Q.length){p2.push(Q[i]);if(i===ia)break;}
+  const c1=clean(p1),c2=clean(p2);if(c1.length<3||c2.length<3||Math.abs(area(c1))<1e-6||Math.abs(area(c2))<1e-6)return null;return [c1,c2];}
+function splitAt(A,B){const out=[];let n=0;sp.pcs.forEach(P=>{const r=cutPiece(P,A,B);if(r){out.push(...r);n++;}else out.push(P);});
+  if(!n)return false;sp.hist.push(sp.pcs.map(x=>x.slice()));sp.pcs=out;sp.cuts++;return true;}
+function splitBars(){$('b1').innerHTML='<span>Shape:</span>'+Object.keys(SPS).map(k=>`<button data-sp="${k}" class="${sp.k===k?'on':''}">${k}</button>`).join('');
+  $('b2').innerHTML=`<button id="apBtn" class="${sp.apart?'on':''}">↔ Pull apart</button><button id="nmBtn" class="${sp.names?'on':''}">Names</button><button id="spUndo">↶ Undo</button><button id="spAgain">Start again</button><button id="spRec">📝 Record</button>`;
+  document.querySelectorAll('[data-sp]').forEach(b=>b.onclick=()=>{sp.k=b.dataset.sp;spReset();splitBars();draw();});
+  $('apBtn').onclick=e=>{sp.apart=!sp.apart;sp.first=null;e.target.classList.toggle('on',sp.apart);draw();};$('nmBtn').onclick=e=>{sp.names=!sp.names;e.target.classList.toggle('on',sp.names);draw();};
+  $('spUndo').onclick=()=>{if(sp.hist.length){sp.pcs=sp.hist.pop();sp.cuts--;}sp.first=null;draw();};$('spAgain').onclick=()=>{spReset();draw();};
+  $('spRec').onclick=()=>{if(sp.pcs.length<2){$('say').innerHTML='Split the shape first, then record it.';return;}recs.split.push({img:thumb(sp.pcs,sp.pcs.map((_,i)=>SCOL[i%SCOL.length])),t:`${cap(art(sp.k))} split into ${countText(sp.pcs.map(shapeName))}.`});renderRec();};}
+function drawSplit(){svg2.setAttribute('viewBox','0 0 1000 600');const g=svg2,C0=centroid(sp.pcs.flat());
+  for(let x=0;x<=20;x++)for(let y=0;y<=12;y++)el('circle',{cx:x*SU,cy:y*SU,r:2,fill:'#cbd5e1'},g);
+  sp.pcs.forEach((P,i)=>{const c=centroid(P),off=sp.apart?[(c[0]-C0[0])*.35,(c[1]-C0[1])*.35]:[0,0],Q=P.map(p=>[(p[0]+off[0])*SU,(p[1]+off[1])*SU]);
+    poly(g,Q,{fill:SCOL[i%SCOL.length],stroke:'#1f2937','stroke-width':3});if(sp.apart)marks(g,Q,{eq:false,par:false,rt:true},1);
+    if(sp.names&&sp.pcs.length>1){const cc=centroid(Q),nm=shapeName(P),small=Math.abs(area(P))<12,w=nm.split(' ');if(small&&w.length>1){txt(g,cc[0],cc[1]-2,w.slice(0,-1).join(' '),13,'#1f2937','700');txt(g,cc[0],cc[1]+13,w[w.length-1],13,'#1f2937','700');}else txt(g,cc[0],cc[1]+5,nm,small?13:15,'#1f2937','700');}});
+  if(!sp.apart){for(let x=0;x<=20;x++)for(let y=0;y<=12;y++){if(!onBoundary([x,y]))continue;const f=sp.first&&sp.first[0]===x&&sp.first[1]===y;
+      el('circle',{cx:x*SU,cy:y*SU,r:f?11:6,fill:f?'#dc2626':'#1f2937',stroke:'#fff','stroke-width':2,'pointer-events':'none'},g);}
+    if(sp.first){el('circle',{cx:sp.first[0]*SU,cy:sp.first[1]*SU,r:20,fill:'none',stroke:'#dc2626','stroke-width':2,'stroke-dasharray':'4 4','pointer-events':'none'},g);}
+    const hit=el('rect',{x:0,y:0,width:1000,height:600,fill:'transparent',style:'cursor:crosshair'},g);
+    hit.addEventListener('pointerdown',e=>{const q=pt(svg2,e),X=[Math.round(q.x/SU),Math.round(q.y/SU)];if(Math.hypot(q.x/SU-X[0],q.y/SU-X[1])>.45||!onBoundary(X)){$('say').innerHTML='Tap a <b>dot on the edge</b> of the shape.';return;}
+      if(!sp.first){sp.first=X;draw();return;}if(sp.first[0]===X[0]&&sp.first[1]===X[1]){sp.first=null;draw();return;}
+      const ok=splitAt(sp.first,X);sp.first=null;draw();if(!ok)$('say').innerHTML='That line doesn\'t cut across the shape. Pick two dots on <b>different edges</b>.';});}
+  let say;const nm=sp.pcs.map(shapeName);
+  if(sp.pcs.length===1)say=sp.first?'Now tap another dot on a different edge to cut.':`Split the <b>${sp.k}</b>: tap a dot on one edge, then a dot on another edge to cut a straight line.`;
+  else say=`The ${sp.k} has been split into <b>${countText(nm)}</b>. `+(sp.first?'Tap another dot to finish the cut.':'Cut again, press ↔ Pull apart to see the pieces, or 📝 Record.');
+  $('say').innerHTML=say;}
+
+/* ---------- modes ---------- */
+const HINT2={cmp:'Equal sides have matching tick marks, parallel sides have matching green arrows, and right angles have a red square. Tap a shape to describe it, tap two to compare. Group the shapes by one or two features (a Carroll diagram).',
+  comb:'Drag pieces into the outline. Tap a piece to choose it, then ↻ Turn or ⇋ Flip it. Pieces snap to the dots. When the outline is filled exactly (no gaps, no overlaps), press 📝 Record.',
+  split:'Tap a dot on one edge, then a dot on another edge, to cut the shape with a straight line. Each piece is named. Cut more than once to make more pieces.'};
+function draw(){if(mode==='ex')return;svg2.innerHTML='';if(mode==='cmp')drawCmp();if(mode==='comb')drawComb();if(mode==='split')drawSplit();}
+function setMode(m){mode=m;document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));
+  $('s2').style.display=m==='ex'?'none':'';$('exAll').style.display=m==='ex'?'':'none';
+  if(m==='cmp')cmpBars();if(m==='comb'){if(!cb.pcs.length)CH[cb.ch].use.forEach(addPiece);cb.sel=-1;combBars();}if(m==='split'){if(!sp.pcs.length)spReset();splitBars();}
+  if(m!=='ex')$('hint2').textContent=HINT2[m];renderRec();draw();if(m==='ex')render();}
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+setMode('cmp');
 </script></body></html>
