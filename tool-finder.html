@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maths Tool Finder</title>
+<style>
+*{box-sizing:border-box}
+:root{--es1:#15803d;--s1:#1d4ed8;--s2:#c2410c;--s3:#7e22ce;--na:#4338ca;--ms:#0f766e;--sp:#be123c;--line:#e5e7eb;--muted:#64748b}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+header{padding:14px 16px 6px}
+h1{margin:0;font-size:22px}
+.sub{color:var(--muted);font-size:14px;margin-top:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 16px}
+.lab{font-weight:700;font-size:14px;min-width:84px;color:#334155}
+.chip{font:inherit;font-size:15px;padding:7px 13px;border:2px solid #cbd5e1;border-radius:999px;background:#fff;color:#1f2937;cursor:pointer;line-height:1.2}
+.chip small{display:block;font-size:11px;color:var(--muted);font-weight:500}
+.chip.on{color:#fff;border-color:var(--c,#1f2937);background:var(--c,#1f2937)}
+.chip.on small{color:#fff;opacity:.9}
+select,input[type=search]{font:inherit;font-size:15px;padding:7px 10px;border:2px solid #cbd5e1;border-radius:10px;background:#fff}
+input[type=search]{flex:1;min-width:180px}
+#count{padding:4px 16px 0;color:var(--muted);font-size:14px}
+main{padding:6px 16px 20px}
+.group{margin:14px 0 6px;border-left:6px solid var(--c);padding:2px 0 2px 12px}
+.group h2{margin:0;font-size:19px}
+.group .syl{font-size:13px;color:var(--muted);margin-top:2px}
+.stagehead{margin:12px 0 4px;font-weight:800;font-size:15px;color:var(--c)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin:6px 0 4px}
+.card{border:1.5px solid var(--line);border-radius:14px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;background:#fff}
+.card:hover{border-color:#94a3b8}
+.card b{font-size:16px}
+.card p{margin:0;font-size:14px;color:#475569;line-height:1.4;flex:1}
+.foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.st{font-size:11.5px;font-weight:800;padding:2px 7px;border-radius:999px;border:1.5px solid var(--c);color:var(--c)}
+.st.hl{background:var(--c);color:#fff}
+.open{margin-left:auto;font:inherit;font-size:14px;font-weight:700;text-decoration:none;color:#fff;background:#2563eb;padding:6px 12px;border-radius:9px}
+.open:hover{background:#1d4ed8}
+.copy{font:inherit;font-size:12.5px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:4px 8px;cursor:pointer;color:#475569}
+.ext{font-size:11px;color:var(--muted);font-weight:700}
+.empty{padding:30px 0;color:var(--muted);font-size:16px}
+</style></head><body>
+<header><h1>🔎 Maths Tool Finder</h1><div class="sub">NSW Mathematics K–10 Syllabus (2022). Choose a stage and a strand to find tools for modelling and explicit teaching.</div></header>
+<div class="row" id="stageRow"><span class="lab">Stage</span></div>
+<div class="row" id="strandRow"><span class="lab">Strand</span></div>
+<div class="row"><span class="lab">Focus area</span><select id="fa"></select><input type="search" id="q" placeholder="Search tools (e.g. fractions, clock, arrays)"></div>
+<div id="count"></div>
+<main id="out"></main>
+<script>
+const STAGES=[['ES1','Early Stage 1','Kindergarten','--es1'],['S1','Stage 1','Years 1–2','--s1'],['S2','Stage 2','Years 3–4','--s2'],['S3','Stage 3','Years 5–6','--s3']];
+const STRANDS=[['NA','Number and algebra','--na'],['MS','Measurement and space','--ms'],['SP','Statistics and probability','--sp']];
+// focus area pages: plain name + the syllabus focus area name at each stage
+const FA={
+ rep:{s:'NA',n:'Representing numbers',syl:{ES1:'Representing whole numbers',S1:'Representing whole numbers',S2:'Representing numbers using place value',S3:'Represents numbers using place value'}},
+ add:{s:'NA',n:'Adding and subtracting',syl:{ES1:'Combining and separating quantities',S1:'Combining and separating quantities',S2:'Additive relations',S3:'Additive relations'}},
+ mult:{s:'NA',n:'Multiplying and dividing',syl:{ES1:'Forming groups',S1:'Forming groups',S2:'Multiplicative relations',S3:'Multiplicative relations'}},
+ frac:{s:'NA',n:'Fractions',syl:{S1:'Forming groups (halves, quarters, eighths)',S2:'Partitioned fractions',S3:'Representing quantity fractions'}},
+ gm:{s:'MS',n:'Length, position and angles',syl:{ES1:'Geometric measure',S1:'Geometric measure',S2:'Geometric measure',S3:'Geometric measure'}},
+ sp2:{s:'MS',n:'2D shapes and area',syl:{ES1:'Two-dimensional spatial structure',S1:'Two-dimensional spatial structure',S2:'Two-dimensional spatial structure',S3:'Two-dimensional spatial structure'}},
+ sp3:{s:'MS',n:'3D objects, volume and capacity',syl:{ES1:'Three-dimensional spatial structure',S1:'Three-dimensional spatial structure',S2:'Three-dimensional spatial structure',S3:'Three-dimensional spatial structure'}},
+ nsm:{s:'MS',n:'Mass and time',syl:{ES1:'Non-spatial measure',S1:'Non-spatial measure',S2:'Non-spatial measure',S3:'Non-spatial measure'}},
+ data:{s:'SP',n:'Data',syl:{ES1:'Data',S1:'Data',S2:'Data',S3:'Data'}},
+ chance:{s:'SP',n:'Chance',syl:{S1:'Chance',S2:'Chance',S3:'Chance'}}};
+// tool: [file, name, use it to..., {focus area: stages}]
+const T=[
+['ten-frames.html','Ten Frames','Show numbers to 10 and 20 on five and ten frames, with a quick-look flash game.',{rep:'ES1 S1',add:'ES1 S1'}],
+['quick-look-dots.html','Quick Look Dots','Subitise dice, domino, finger, ten-frame and scattered dot patterns.',{rep:'ES1 S1'}],
+['bead-string-es1.html','Bead String (ES1)','Count big beads one by one, one more and one less, and see 5 and some more.',{rep:'ES1',add:'ES1'}],
+['number-track.html','Number Track','Hop a frog along a 0–20 track and find the missing numbers.',{rep:'ES1 S1'}],
+['number-cards.html','Number Cards','Order number cards and play the cover-up game.',{rep:'ES1 S1'}],
+['part-part-whole.html','Part-Part-Whole','Split a whole into two parts and find the missing part.',{add:'ES1 S1'}],
+['compare-collections.html','Compare Collections','Compare collections: more, fewer, the same, and how many more.',{add:'ES1 S1'}],
+['pattern-maker.html','Pattern Maker','Make, copy and continue repeating patterns.',{mult:'ES1 S1'}],
+['sharing-grouping.html','Sharing & Grouping','Share equally and make equal groups, with remainders.',{mult:'ES1 S1 S2'}],
+['shape-sorter.html','Shape Sorter','Sort 2D shapes by name, sides, and straight or curved edges.',{sp2:'ES1 S1'}],
+['compare-lengths.html','Compare Lengths','Compare and order lengths directly and with informal units.',{gm:'ES1 S1'}],
+['position-words.html','Position Words','Model position language: on, under, beside, between, left and right.',{gm:'ES1 S1'}],
+['balance-scales.html','Balance Scales','Compare masses and balance equal amounts.',{nsm:'ES1 S1 S2',add:'S1 S2'}],
+['oclock.html',"O'clock Clock",'Read analog and digital clocks to the hour using "o\'clock".',{nsm:'ES1'}],
+['cube-builder.html','Cube Builder','Build objects with cubes and count cubes to measure volume.',{sp3:'ES1 S1 S2 S3'}],
+['hundreds-chart.html','Hundreds Chart','Explore patterns and skip counting on a hundreds chart.',{rep:'S1 S2',mult:'S1 S2'}],
+['bead-string.html','Bead String & Rekenrek','Model adding and subtracting with a 100-bead string, rekenrek and double strings.',{add:'S1 S2'}],
+['empty-number-line.html','Empty Number Line','Show jumps for adding and subtracting, and elapsed time.',{add:'S1 S2 S3',nsm:'S2 S3'}],
+['base-10-blocks.html','Base-10 Blocks','Represent numbers with ones, tens and hundreds, and trade between them.',{rep:'S1 S2'}],
+['arrays.html','Arrays','Rows and columns, with turned, split and partly covered arrays.',{mult:'S1 S2 S3'}],
+['fraction-shapes.html','Fraction Shapes','Fraction strips for halves, quarters and eighths, and fractions of collections.',{frac:'S1 S2'}],
+['clock.html','Teaching Clock','Half past, quarter past and to, minutes, and 24-hour time.',{nsm:'S1 S2 S3'}],
+['calendar.html','Calendar','Days, weeks, months and dates on a calendar.',{nsm:'S1'}],
+['money.html','Money','Make amounts with coins and notes, and count change.',{rep:'S1 S2',add:'S1 S2'}],
+['pattern-blocks.html','Pattern Blocks','Snap shapes together into designs; the hexagon as one whole.',{sp2:'ES1 S1 S2',frac:'S2'}],
+['area-perimeter.html','Area & Perimeter','Compare areas, measure with informal and square units, and find perimeter.',{sp2:'S1 S2 S3',gm:'S2 S3'}],
+['symmetry-transformations.html','Symmetry & Transformations','Lines of symmetry; flips, slides and turns.',{sp2:'S1 S2 S3'}],
+['marble-bag.html','Marble Bag','Predict, then draw marbles from a bag: certain, likely, unlikely, impossible.',{chance:'S1 S2 S3'}],
+['graph-maker.html','Graph Maker','Collect data and display it in picture, column and other graphs.',{data:'ES1 S1 S2 S3'}],
+['place-value-chart.html','Place Value Chart','Place value of whole numbers and decimals.',{rep:'S2 S3'}],
+['arrow-cards.html','Arrow Cards & Number Expander','Build, expand and rename numbers.',{rep:'S2',add:'S2'}],
+['wipe-out.html','Wipe-out','Change one digit at a time to show place value.',{rep:'S2 S3'}],
+['bar-model.html','Bar Model','Bar models for word problems: parts and wholes, comparisons, fractions and percentages.',{add:'S2 S3',mult:'S2 S3',frac:'S3'}],
+['number-line.html','Number Line','Number lines for whole numbers, fractions and decimals.',{rep:'S1 S2 S3',frac:'S2 S3'}],
+['fraction-wall.html','Fraction Wall','Compare fractions and find equivalent fractions on a fraction wall.',{frac:'S2 S3'}],
+['fraction-strips.html','Fraction Strips','Fold, label and compare fraction strips.',{frac:'S2'}],
+['reading-scales.html','Reading Scales','Read scales for length, mass, capacity and temperature.',{gm:'S2 S3',nsm:'S2 S3',sp3:'S2 S3',rep:'S3'}],
+['right-angle-checker.html','Right Angle Checker','Find right angles, and angles greater or less than a right angle.',{gm:'S2'}],
+['grid-map.html','Grid Map & Compass','Use grid references and compass directions on a map.',{gm:'S2'}],
+['tessellation.html','Tessellation','Make tessellations and check whether shapes tessellate.',{sp2:'S2'}],
+['chance.html','Chance Experiments','Run coin, dice and spinner experiments and record the results.',{chance:'S2 S3'}],
+['3d-nets.html','3D Nets','Fold nets into 3D objects.',{sp3:'S2 S3'}],
+['shape-explorer.html','2D Shapes Explorer','Compare, sort, combine and split 2D shapes; drag corners to change them.',{sp2:'S2 S3'}],
+['geoboard.html','Geoboard','Make shapes with rubber bands, showing area, perimeter and right angles.',{sp2:'S2 S3'}],
+['double-number-line.html','Double Number Line','Double number lines for percentages and rates.',{rep:'S3',mult:'S3'}],
+['area-model.html','Area Model','Show multiplication with partial products in an area model.',{mult:'S2 S3'}],
+['equivalent-fractions.html','Equivalent Fractions','Split parts to find equivalent fractions.',{frac:'S3'}],
+['factors-primes.html','Factors & Primes','Factors, multiples, and prime and composite numbers.',{mult:'S3'}],
+['protractor.html','Protractor','Measure and draw angles with a protractor.',{gm:'S3'}],
+['coordinate-grid.html','Coordinate Grid','Plot and name points in one or four quadrants.',{gm:'S3'}],
+['algebra-tiles.html','Algebra Tiles','Model expressions with algebra tiles (Stage 4 extension).',{mult:'S3'},true]];
+const $=id=>document.getElementById(id);
+const P=new URLSearchParams(location.search);
+let st={stage:P.get('stage')||'',strand:P.get('strand')||'',fa:P.get('fa')||'',q:P.get('q')||''};
+if(!location.search){try{const s=JSON.parse(localStorage.getItem('mtf')||'{}');if(s.stage)st.stage=s.stage;if(s.strand)st.strand=s.strand;}catch(e){}}
+if(st.fa&&FA[st.fa])st.strand=FA[st.fa].s;
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+function chips(){
+  $('stageRow').innerHTML='<span class="lab">Stage</span>'+[['','All stages','','--muted']].concat(STAGES).map(([k,n,y,c])=>`<button class="chip ${st.stage===k?'on':''}" data-st="${k}" style="--c:var(${c})">${n}${y?`<small>${y}</small>`:''}</button>`).join('');
+  $('strandRow').innerHTML='<span class="lab">Strand</span>'+[['','All strands','--muted']].concat(STRANDS).map(([k,n,c])=>`<button class="chip ${st.strand===k?'on':''}" data-sd="${k}" style="--c:var(${c})">${n}</button>`).join('');
+  document.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>{st.stage=b.dataset.st;save();chips();show();});
+  document.querySelectorAll('[data-sd]').forEach(b=>b.onclick=()=>{st.strand=b.dataset.sd;if(st.fa&&FA[st.fa].s!==st.strand)st.fa='';save();chips();show();});
+  $('fa').innerHTML='<option value="">All focus areas</option>'+STRANDS.filter(s=>!st.strand||s[0]===st.strand).map(([k,n])=>`<optgroup label="${n}">`+Object.entries(FA).filter(([,f])=>f.s===k).map(([id,f])=>`<option value="${id}" ${st.fa===id?'selected':''}>${f.n}</option>`).join('')+'</optgroup>').join('');}
+function save(){try{localStorage.setItem('mtf',JSON.stringify({stage:st.stage,strand:st.strand}));}catch(e){}}
+$('fa').onchange=e=>{st.fa=e.target.value;if(st.fa)st.strand=FA[st.fa].s;chips();show();};
+$('q').value=st.q;$('q').oninput=e=>{st.q=e.target.value.trim().toLowerCase();show();};
+const stageInfo=k=>STAGES.find(s=>s[0]===k);
+function card(t,stages,faId){const [file,name,desc,,ext]=t;
+  return `<div class="card"><b>${esc(name)}</b><p>${esc(desc)}</p><div class="foot">${STAGES.map(([k,,,c])=>stages.includes(k)?`<span class="st ${st.stage===k?'hl':''}" style="--c:var(${c})">${k}</span>`:'').join('')}${ext?'<span class="ext">EXTENSION</span>':''}
+   <button class="copy" data-f="${file}" title="Copy the link to embed this tool">Copy link</button><a class="open" href="${file}" target="_blank" rel="noopener">Open ↗</a></div></div>`;}
+function show(){
+  const q=st.q,match=t=>!q||(t[1]+' '+t[2]).toLowerCase().includes(q)||Object.keys(t[3]).some(f=>(FA[f].n+' '+Object.values(FA[f].syl).join(' ')).toLowerCase().includes(q));
+  let html='',n=new Set();
+  const fas=Object.keys(FA).filter(id=>(!st.strand||FA[id].s===st.strand)&&(!st.fa||st.fa===id));
+  fas.forEach(id=>{const f=FA[id],sc=STRANDS.find(s=>s[0]===f.s)[2];
+    const items=T.filter(t=>t[3][id]&&match(t)).map(t=>({t,stages:t[3][id].split(' ')})).filter(x=>!st.stage||x.stages.includes(st.stage));
+    if(!items.length)return;items.forEach(x=>n.add(x.t[0]));
+    const sylNames=st.stage?(f.syl[st.stage]||''):[...new Set(Object.values(f.syl))].map(s=>{const ks=Object.keys(f.syl).filter(k=>f.syl[k]===s);return `${s} (${ks.length>1?ks[0]+'–'+ks[ks.length-1]:ks[0]})`;}).join(' · ');
+    html+=`<section class="group" style="--c:var(${sc})"><h2>${f.n}</h2><div class="syl">${STRANDS.find(s=>s[0]===f.s)[1]} · Syllabus focus area: ${esc(sylNames)}</div>`;
+    if(st.fa&&!st.stage){// one focus area: set out by stage
+      STAGES.forEach(([k,nm,yr,c])=>{const L=items.filter(x=>x.stages.includes(k));if(!L.length)return;html+=`<div class="stagehead" style="--c:var(${c})">${nm} (${yr})${f.syl[k]?' · '+esc(f.syl[k]):''}</div><div class="cards">${L.map(x=>card(x.t,x.stages,id)).join('')}</div>`;});}
+    else html+=`<div class="cards">${items.map(x=>card(x.t,x.stages,id)).join('')}</div>`;
+    html+='</section>';});
+  $('out').innerHTML=html||'<div class="empty">No tools match. Try another stage, strand or search word.</div>';
+  const s=st.stage?stageInfo(st.stage):null;
+  $('count').textContent=`${n.size} tool${n.size===1?'':'s'}`+(s?` for ${s[1]} (${s[2]})`:'')+(st.strand?` · ${STRANDS.find(x=>x[0]===st.strand)[1]}`:'')+'. Tools that fit more than one focus area appear in each.';
+  document.querySelectorAll('.copy').forEach(b=>b.onclick=()=>{const u=new URL(b.dataset.f,location.href).href;const done=()=>{b.textContent='Copied ✓';setTimeout(()=>b.textContent='Copy link',1500);};
+    if(navigator.clipboard)navigator.clipboard.writeText(u).then(done,()=>prompt('Copy this link:',u));else prompt('Copy this link:',u);});}
+chips();show();
+</script></body></html>
