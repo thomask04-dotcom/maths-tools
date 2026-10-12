@@ -38,21 +38,29 @@ function reset(){clearInterval(timer);timer=null;pile=n;next=0;dealt=mode==='sha
 function item(x,y,r,col){el('circle',{cx:x,cy:y,r,fill:col||'#f59e0b',stroke:'#92400e','stroke-width':2},svg);el('circle',{cx:x-r*0.3,cy:y-r*0.3,r:r*0.25,fill:'#fff',opacity:.5},svg);}
 function render(){
   svg.innerHTML='';
-  el('rect',{x:20,y:20,width:960,height:150,rx:16,fill:'#f1f5f9',stroke:'#cbd5e1','stroke-width':2},svg);txt(svg,40,48,`Still to ${mode==='share'?'share':'group'}: ${pile}`,16,'#475569','700','start');
-  for(let i=0;i<pile;i++){const c=i%20,r=Math.floor(i/20);item(60+c*46,80+r*40,15);}
+  const pr=Math.max(1,Math.ceil(pile/20)),pileH=Math.max(110,48+pr*34);
+  el('rect',{x:20,y:20,width:960,height:pileH,rx:16,fill:'#f1f5f9',stroke:'#cbd5e1','stroke-width':2},svg);txt(svg,40,46,`Still to ${mode==='share'?'share':'group'}: ${pile}`,16,'#475569','700','start');
+  for(let i=0;i<pile;i++){const c=i%20,r=Math.floor(i/20);item(60+c*46,76+r*34,14);}
+  const top=pileH+40;
   if(mode==='share'){
-    const cols=Math.min(k,5),rows=Math.ceil(k/5),pw=Math.min(180,920/cols),ph=rows>1?170:320;svg.setAttribute('viewBox',`0 0 1000 ${200+rows*(ph+20)}`);
-    for(let p=0;p<k;p++){const cx=40+(p%5)*(pw+10)+pw/2,cy=200+Math.floor(p/5)*(ph+20)+ph/2;
-      el('ellipse',{cx,cy,rx:pw/2-4,ry:ph/2-6,fill:'#fff',stroke:'#64748b','stroke-width':3},svg);el('ellipse',{cx,cy,rx:pw/2-22,ry:ph/2-24,fill:'none',stroke:'#e2e8f0','stroke-width':2},svg);
-      const m=dealt[p],per=4,r=Math.min(14,pw/12);for(let i=0;i<m;i++){const col=i%per,row=Math.floor(i/per),inRow=Math.min(per,m-row*per);item(cx+(col-(inRow-1)/2)*(2*r+6),cy-ph/2+40+row*(2*r+6),r);}
-      txt(svg,cx,cy+ph/2+2-(rows>1?-10:0),String(m),20,'#111827','800');}
+    const cols=Math.min(k,5),rows=Math.ceil(k/5),gap=16,D=Math.min(k<=2?280:k<=3?240:190,(920-(cols-1)*gap)/cols),rowH=D+46;
+    svg.setAttribute('viewBox',`0 0 1000 ${top+rows*rowH+10}`);
+    const maxM=Math.max(...dealt,Math.ceil(n/k)),side=D*0.64;
+    for(let p=0;p<k;p++){const rowN=Math.floor(p/5),inRow=Math.min(5,k-rowN*5),cx=500+((p%5)-(inRow-1)/2)*(D+gap),cy=top+rowN*rowH+D/2;
+      el('circle',{cx,cy,r:D/2-3,fill:'#fff',stroke:'#64748b','stroke-width':3},svg);el('circle',{cx,cy,r:D/2-16,fill:'none',stroke:'#e2e8f0','stroke-width':2},svg);
+      const m=dealt[p],per=Math.ceil(Math.sqrt(maxM)),rr=Math.ceil(maxM/per),cell=Math.min(38,side/Math.max(per,rr)),r=Math.min(15,cell/2-1.5);
+      const rowsUsed=Math.ceil(m/per);for(let i=0;i<m;i++){const row=Math.floor(i/per),c=i%per,inR=Math.min(per,m-row*per);item(cx+(c-(inR-1)/2)*cell,cy+(row-(rowsUsed-1)/2)*cell,r);}
+      txt(svg,cx,cy+D/2+28,String(m),22,'#111827','800');}
   } else {
-    const g=k,groups=dealt.length,cols=Math.min(Math.max(groups,1),6),gw=Math.min(150,920/Math.max(cols,1)),rows=Math.max(1,Math.ceil(groups/6)),gh=Math.max(90,Math.ceil(g/3)*36+30);svg.setAttribute('viewBox',`0 0 1000 ${210+rows*(gh+16)}`);
-    for(let q=0;q<groups;q++){const x=40+(q%6)*(gw+10),y=200+Math.floor(q/6)*(gh+16);el('rect',{x,y,width:gw,height:gh,rx:14,fill:'#fff',stroke:'#64748b','stroke-width':3},svg);
-      for(let i=0;i<g;i++){const c=i%3,r=Math.floor(i/3);item(x+gw/2+(c-1)*34,y+24+r*34,13,'#60a5fa');}txt(svg,x+gw/2,y+gh-8,'group '+(q+1),13,'#475569','700');}
+    const g=k,groups=dealt.length,cols=Math.min(Math.max(groups,1),6),per=g<=4?g:g<=9?3:4,gr=Math.ceil(g/per),cell=30,gw=Math.max(110,per*cell+30),gh=gr*cell+44,rows=Math.max(1,Math.ceil(groups/6)),gap=12;
+    svg.setAttribute('viewBox',`0 0 1000 ${top+rows*(gh+gap)+10}`);
+    for(let q=0;q<groups;q++){const rowN=Math.floor(q/6),inRow=Math.min(6,groups-rowN*6),x=500+((q%6)-(inRow-1)/2)*(gw+gap)-gw/2,y=top+rowN*(gh+gap);
+      el('rect',{x,y,width:gw,height:gh,rx:14,fill:'#fff',stroke:'#64748b','stroke-width':3},svg);
+      for(let i=0;i<g;i++){const row=Math.floor(i/per),c=i%per,inR=Math.min(per,g-row*per);item(x+gw/2+(c-(inR-1)/2)*cell,y+14+cell/2+row*cell,12,'#60a5fa');}
+      txt(svg,x+gw/2,y+gh-9,'group '+(q+1),13,'#475569','700');}
   }
 }
-function done(){return mode==='share'?pile<k:pile<k;}
+function done(){return mode==='share'?(next===0&&pile<k):pile<k;}
 function sentence(){
   const q=mode==='share'?Math.floor(n/k):dealt.length,r=pile,fin=done();
   let s='';
