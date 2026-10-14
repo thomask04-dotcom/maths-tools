@@ -6,7 +6,7 @@
 body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:14px}
 .title{font-weight:700;margin-right:6px;font-size:16px}
-button,input{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937}
+button,input,select{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937}
 button{cursor:pointer}
 button:hover{border-color:#94a3b8}
 button.on{background:#2563eb;border-color:#2563eb;color:#fff}
@@ -31,8 +31,14 @@ svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-web
 <label>I measured <input id="ans" type="number" min="0" max="360"> °</label><button id="checkBtn">Check</button>
 <span id="fb"></span>
 </div>
+<div class="bar" id="pracBar"><span><b>Practise measuring:</b></span>
+<select id="ptype"><option value="mixed">Mixed angles</option><option value="acute">Acute angles</option><option value="right">Right angles</option><option value="obtuse">Obtuse angles</option><option value="straight">Straight angles</option><option value="reflex">Reflex angles</option><option value="same">The same angle, drawn different ways</option></select>
+<select id="pn"><option value="5">5 angles</option><option value="10">10 angles</option></select>
+<button id="pStart">▶ Start</button><button id="pNext" style="display:none;font-weight:700">Next angle ▶</button><button id="pStop" style="display:none">Stop</button><span id="pProg" style="font-weight:700"></span>
+</div>
+<div id="pSum" style="font-size:15px;padding:0 12px"></div>
 <svg id="svg" viewBox="0 0 1000 560"></svg>
-<div class="hint">Drag the round ends of the arms to change the angle. Drag the protractor to move it, and drag its orange ⟳ handle to turn it. Put the centre cross on the vertex and line up 0° with one arm, then read the scale.</div>
+<div class="hint">Drag the round ends of the arms to change the angle. Drag the protractor to move it, and drag its orange ⟳ handle to turn it. Put the centre cross on the vertex and line up 0° with one arm, then read the scale. Practise measuring gives a set of angles, each turned a different way with different arm lengths. Try "The same angle, drawn different ways" to show that turning an angle or changing its arm length doesn't change its size.</div>
 <script>
 const NS='http://www.w3.org/2000/svg';
 function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
@@ -41,7 +47,7 @@ function pt(svg,e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.
 const $=id=>document.getElementById(id);
 const svg=$('svg'),RAD=Math.PI/180;
 const V={x:430,y:330},ARM=240,PR=210;
-let a1=10,a2=65,reflex=false,prot={x:650,y:300,rot:0},showProt=true,full=false,showSize=true,drag=null;
+let L=[ARM,ARM],pr=null,a1=10,a2=65,reflex=false,prot={x:650,y:300,rot:0},showProt=true,full=false,showSize=true,drag=null;
 const norm=d=>((d%360)+360)%360;
 function P(c,ang,r){return [c.x+r*Math.cos(ang*RAD),c.y-r*Math.sin(ang*RAD)];}
 function angleSize(){const d=norm(a2-a1),inner=d<=180?d:360-d;return reflex?360-inner:inner;}
@@ -75,11 +81,11 @@ function render(){
   if(sw>0.5&&sw<359.5)el('path',{d:`M${V.x} ${V.y} L${sx} ${sy} A${r0} ${r0} 0 ${sw>180?1:0} 0 ${ex} ${ey} Z`,fill:'#fde68a',stroke:'#d97706','stroke-width':2},svg);
   if(Math.abs(sw-90)<0.5&&!reflex){const [ax,ay]=P(V,s,22),[bx,by]=P(V,s+90,22),[cx,cy]=P(V,s+45,22*Math.SQRT2);el('path',{d:`M${ax} ${ay} L${cx} ${cy} L${bx} ${by}`,fill:'none',stroke:'#d97706','stroke-width':2},svg);}
   // arms
-  for(const a of [a1,a2]){const [x,y]=P(V,a,ARM);el('line',{x1:V.x,y1:V.y,x2:x,y2:y,stroke:'#1f2937','stroke-width':4,'stroke-linecap':'round'},svg);}
+  for(const [k,a] of [[0,a1],[1,a2]]){const [x,y]=P(V,a,L[k]);el('line',{x1:V.x,y1:V.y,x2:x,y2:y,stroke:'#1f2937','stroke-width':4,'stroke-linecap':'round'},svg);}
   el('circle',{cx:V.x,cy:V.y,r:5,fill:'#1f2937'},svg);
   if(showProt)drawProt();
   // arm handles on top
-  [a1,a2].forEach((a,k)=>{const [x,y]=P(V,a,ARM),h=el('circle',{cx:x,cy:y,r:14,fill:'#2563eb',stroke:'#fff','stroke-width':3,style:'cursor:grab'},svg);h.addEventListener('pointerdown',e=>start({t:'arm',k},e));});
+  [a1,a2].forEach((a,k)=>{const [x,y]=P(V,a,L[k]),h=el('circle',{cx:x,cy:y,r:14,fill:'#2563eb',stroke:'#fff','stroke-width':3,style:'cursor:grab'},svg);h.addEventListener('pointerdown',e=>start({t:'arm',k},e));});
   const sz=angleSize();
   $('readout').textContent=showSize?`${sz}° · ${typeName(sz)}`:'? °';
 }
@@ -121,7 +127,7 @@ $('fullBtn').onclick=e=>{full=!full;e.target.classList.toggle('on',full);render(
 $('alignBtn').onclick=()=>{prot.x=V.x;prot.y=V.y;const d=norm(a2-a1),first=(d<=180)!==reflex?a1:a2;prot.rot=full?first:first;render();};
 $('reflexBtn').onclick=e=>{reflex=!reflex;e.target.classList.toggle('on',reflex);render();};
 $('showBtn').onclick=e=>{showSize=!showSize;e.target.classList.toggle('on',showSize);render();};
-$('randBtn').onclick=()=>{
+$('randBtn').onclick=()=>{stopPractice();
   a1=Math.floor(Math.random()*360);let s;do{s=5+Math.floor(Math.random()*171);}while(s%5!==0&&Math.random()<0.3);
   a2=norm(a1+(Math.random()<0.5?s:-s));reflex=false;$('reflexBtn').classList.remove('on');
   showSize=false;$('showBtn').classList.remove('on');prot={x:760,y:430,rot:0};$('ans').value='';$('fb').textContent='';render();
@@ -129,13 +135,42 @@ $('randBtn').onclick=()=>{
 $('checkBtn').onclick=()=>{
   const v=+$('ans').value,sz=angleSize(),fb=$('fb');
   if($('ans').value===''){fb.textContent='Type your measurement first.';fb.style.color='#92400e';return;}
-  if(Math.abs(v-sz)<=1){fb.textContent=`✓ Yes! It is ${sz}°, ${typeName(sz).toLowerCase()} angle.`;fb.style.color='#15803d';}
-  else if(Math.abs(v-(180-sz))<=1&&sz!==90){fb.textContent='✗ Close. Check you used the scale that starts at 0° on your arm.';fb.style.color='#b91c1c';}
-  else{fb.textContent='✗ Not quite. Is it acute or obtuse? Measure again.';fb.style.color='#b91c1c';}
+  const ok=Math.abs(v-sz)<=1;if(pr&&pr.cur&&pr.cur.first===null){pr.cur.first=ok;pr.cur.ans=v;}if(pr&&pr.cur)$('pNext').style.display='';
+  if(ok){fb.textContent=`✓ Yes! It is ${sz}°, ${art(typeName(sz).toLowerCase())} angle.`;fb.style.color='#15803d';if(pr){$('pNext').textContent=pr.i+1>=pr.n?'See my results ▶':'Next angle ▶';}}
+  else if(!reflex&&Math.abs(v-(180-sz))<=1&&sz!==90){fb.textContent='✗ Close. Check you used the scale that starts at 0° on your arm.';fb.style.color='#b91c1c';}
+  else if(reflex&&Math.abs(v-(360-sz))<=1){fb.textContent='✗ That is the angle on the other side. A reflex angle is 360° take away that.';fb.style.color='#b91c1c';}
+  else{fb.textContent=reflex?'✗ Not quite. Measure the smaller angle, then take it away from 360°.':'✗ Not quite. Is it acute or obtuse? Measure again.';fb.style.color='#b91c1c';}
 };
 $('numBtn').onclick=e=>{numberless=!numberless;e.target.classList.toggle('on',numberless);render();};
 document.querySelectorAll('[data-am]').forEach(b=>b.onclick=()=>{am=b.dataset.am;document.querySelectorAll('[data-am]').forEach(x=>x.classList.toggle('on',x===b));
-  ['randBtn','checkBtn','ans','alignBtn','reflexBtn'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display=am==='one'?'':'none';});$('fb').textContent=am==='line'?'Angles on a straight line add to 180°.':am==='point'?'Angles around a point add to 360° (a revolution).':'';
+  stopPractice();$('pracBar').style.display=am==='one'?'':'none';['randBtn','checkBtn','ans','alignBtn','reflexBtn'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display=am==='one'?'':'none';});$('fb').textContent=am==='line'?'Angles on a straight line add to 180°.':am==='point'?'Angles around a point add to 360° (a revolution).':'';
   if(am!=='one'){prot={x:V.x,y:V.y,rot:0};full=am==='point';$('fullBtn').classList.toggle('on',full);}render();});
+
+/* ---------- practice sets ---------- */
+const art=w=>(/^[aeiou]/.test(w)?'an ':'a ')+w;
+function pickSize(t){const r=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+  if(t==='acute')return r(8,85);if(t==='right')return 90;if(t==='obtuse')return r(95,172);if(t==='straight')return 180;if(t==='reflex')return r(190,350);
+  const k=['acute','acute','obtuse','obtuse','right','reflex'][r(0,5)];return pickSize(k);}
+function setAngle(size){// random turn, random arm lengths, vertex placed so the arms stay on screen
+  for(let tries=0;tries<300;tries++){const turn=Math.floor(Math.random()*360),la=130+Math.floor(Math.random()*110),lb=130+Math.floor(Math.random()*110),
+      inner=size>180?360-size:size,flip=Math.random()<.5,A1=turn,A2=norm(turn+(flip?inner:-inner)),vx=250+Math.random()*420,vy=200+Math.random()*170;
+    const e1=P({x:vx,y:vy},A1,la),e2=P({x:vx,y:vy},A2,lb);
+    if([e1,e2].every(([x,y])=>x>30&&x<970&&y>30&&y<530)){V.x=vx;V.y=vy;a1=A1;a2=A2;L=[la,lb];reflex=size>180;$('reflexBtn').classList.toggle('on',reflex);return;}}
+  V.x=430;V.y=330;a1=0;a2=size>180?360-size:size;L=[ARM,ARM];reflex=size>180;$('reflexBtn').classList.toggle('on',reflex);}
+function nextPractice(){if(pr.cur)pr.done.push(pr.cur);pr.i=pr.done.length;
+  if(pr.i>=pr.n){showResults();return;}
+  const size=pr.type==='same'?pr.size:pickSize(pr.type);setAngle(size);pr.cur={size,first:null,ans:null};
+  showSize=false;$('showBtn').classList.remove('on');prot={x:V.x>500?245:755,y:V.y>300?250:500,rot:0};
+  $('ans').value='';$('fb').textContent='';$('pNext').style.display='none';
+  $('pProg').textContent=`Angle ${pr.i+1} of ${pr.n}`+(size>180?' · reflex: measure the smaller angle, then take it away from 360°':'');$('pSum').innerHTML='';render();}
+function showResults(){const right=pr.done.filter(d=>d.first).length;$('pProg').textContent=`Done! ${right} of ${pr.n} correct first time.`;
+  $('pSum').innerHTML='<b>Results:</b> '+pr.done.map((d,i)=>`${i+1}. ${d.size}° ${d.first?'✓':`✗ (you said ${d.ans===null?'—':d.ans+'°'})`}`).join(' &nbsp; ')+
+    (pr.type==='same'?`<br><b>Every angle was ${pr.size}°!</b> Turning an angle, or making its arms longer or shorter, does not change its size. The size of an angle is the amount of turn between the arms.`:'');
+  $('pNext').style.display='none';$('pStart').textContent='▶ Start again';pr.cur=null;showSize=true;$('showBtn').classList.add('on');render();}
+function stopPractice(){pr=null;$('pNext').style.display='none';$('pStop').style.display='none';$('pProg').textContent='';$('pSum').innerHTML='';$('pStart').textContent='▶ Start';V.x=430;V.y=330;L=[ARM,ARM];}
+$('pStart').onclick=()=>{const t=$('ptype').value;pr={type:t,n:+$('pn').value,i:0,done:[],cur:null,size:t==='same'?pickSize(Math.random()<.5?'acute':'obtuse'):0};$('pStop').style.display='';nextPractice();};
+$('pNext').onclick=()=>nextPractice();
+$('pStop').onclick=()=>{stopPractice();render();};
+$('ans').addEventListener('keydown',e=>{if(e.key==='Enter')$('checkBtn').click();});
 render();
 </script></body></html>
