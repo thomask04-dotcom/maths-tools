@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Playing Cards</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:14px}
+.title{font-weight:700;margin-right:6px;font-size:16px}
+.mode button{font-size:15px;font-weight:600}
+button,select{font:inherit;font-size:14px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#1f2937;cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+button.go{background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700}
+.lab{font-weight:700;color:#334155}
+#deckInfo{margin-left:auto;color:#475569;font-weight:600}
+#say{font-size:20px;padding:8px 14px;min-height:50px;line-height:1.5}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar mode"><span class="title">Playing Cards (A–10)</span>
+<button data-mode="deal" class="on">🃏 Deal &amp; flip</button><button data-mode="num">🔢 Make a number</button><button data-mode="ten">🔟 Make 10</button><button data-mode="battle">⚔️ Card battle</button>
+<span id="deckInfo"></span>
+</div>
+<div class="bar" id="b1"></div>
+<div class="bar" id="b2"></div>
+<div id="say"></div>
+<svg id="svg" viewBox="0 0 1000 600"></svg>
+<div class="hint" id="hint"></div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,wt,anchor){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+function pt(e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
+const $=id=>document.getElementById(id);
+const svg=$('svg'),CW=110,CH=156,SUITS=['♠','♥','♦','♣'],RED={'♥':1,'♦':1};
+let mode='deal',deck=[],tenZero=false,pips=true;
+/* ---------- deck ---------- */
+function newDeck(){deck=[];for(const s of SUITS)for(let r=1;r<=10;r++)deck.push({r,s,id:s+r+Math.random()});for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}}
+function draw(){if(!deck.length)newDeck();return deck.pop();}
+const TZ=()=>tenZero&&mode==='num',val=c=>TZ()&&c.r===10?0:c.r;
+const rankLab=r=>r===1?'A':String(r);
+/* ---------- drawing a card ---------- */
+const PIPS={1:[[.5,.5]],2:[[.5,.2],[.5,.8]],3:[[.5,.2],[.5,.5],[.5,.8]],4:[[.3,.2],[.7,.2],[.3,.8],[.7,.8]],5:[[.3,.2],[.7,.2],[.5,.5],[.3,.8],[.7,.8]],
+  6:[[.3,.2],[.7,.2],[.3,.5],[.7,.5],[.3,.8],[.7,.8]],7:[[.3,.2],[.7,.2],[.5,.35],[.3,.5],[.7,.5],[.3,.8],[.7,.8]],8:[[.3,.2],[.7,.2],[.5,.35],[.3,.5],[.7,.5],[.5,.65],[.3,.8],[.7,.8]],
+  9:[[.3,.18],[.7,.18],[.3,.39],[.7,.39],[.5,.5],[.3,.61],[.7,.61],[.3,.82],[.7,.82]],10:[[.3,.18],[.7,.18],[.5,.29],[.3,.39],[.7,.39],[.3,.61],[.7,.61],[.5,.71],[.3,.82],[.7,.82]]};
+function cardSVG(p,c,x,y,o){o=o||{};const g=el('g',{transform:`translate(${x} ${y})`},p),w=o.w||CW,h=w*CH/CW,k=w/CW;
+  el('rect',{x:0,y:0,width:w,height:h,rx:10*k,fill:o.down?'#1d4ed8':'#fff',stroke:o.hl||'#334155','stroke-width':o.hl?4:1.5},g);
+  if(o.down){el('rect',{x:7*k,y:7*k,width:w-14*k,height:h-14*k,rx:7*k,fill:'none',stroke:'#93c5fd','stroke-width':2},g);
+    for(let i=1;i<6;i++)el('line',{x1:7*k,y1:7*k+i*(h-14*k)/6,x2:w-7*k,y2:7*k+i*(h-14*k)/6,stroke:'#3b82f6','stroke-width':1},g);return g;}
+  const col=RED[c.s]?'#dc2626':'#111827',lab=rankLab(c.r);
+  txt(g,13*k,24*k,lab,19*k,col,'800');txt(g,13*k,42*k,c.s,15*k,col);
+  const t=txt(g,w-13*k,h-12*k,lab,19*k,col,'800');t.setAttribute('transform',`rotate(180 ${w-13*k} ${h-18*k})`);
+  if(pips){if(c.r===1)txt(g,w/2,h/2+22*k,c.s,62*k,col);else PIPS[c.r].forEach(([px,py])=>txt(g,w*(.2+.6*px),h*(.1+.8*py)+9*k,c.s,25*k,col));}
+  else txt(g,w/2,h/2+22*k,lab,62*k,col,'800');
+  if(TZ()&&c.r===10){el('rect',{x:w/2-20*k,y:h/2-15*k,width:40*k,height:28*k,rx:6*k,fill:'#fef3c7',stroke:'#d97706'},g);txt(g,w/2,h/2+5*k,'= 0',16*k,'#92400e','800');}
+  return g;}
+/* ---------- shared: drag & tap ---------- */
+let drag=null;
+function draggable(g,obj,onTap,onDrop){g.style.cursor='grab';g.addEventListener('pointerdown',e=>{const q=pt(e);drag={obj,dx:q.x-obj.x,dy:q.y-obj.y,sx:q.x,sy:q.y,moved:false,onTap,onDrop};svg.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();});}
+svg.addEventListener('pointermove',e=>{if(!drag)return;const q=pt(e);if(Math.hypot(q.x-drag.sx,q.y-drag.sy)>6)drag.moved=true;if(drag.moved){drag.obj.x=Math.max(-20,Math.min(1000-CW+20,q.x-drag.dx));drag.obj.y=Math.max(-20,Math.min(H()-CH+20,q.y-drag.dy));drag.obj.top=1;render();}});
+svg.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;if(!d.moved){d.onTap&&d.onTap();}else d.onDrop&&d.onDrop(pt(e));render();});
+const H=()=>+svg.getAttribute('viewBox').split(' ')[3];
+/* ================= DEAL & FLIP ================= */
+let table=[],showTot=true,faceDown=false;
+function dealN(n){const startX=40+(table.length%8)*118,row=Math.floor(table.length/8)%3;for(let i=0;i<n;i++){const c=draw(),j=table.length;table.push({c,x:40+(j%8)*118,y:30+(Math.floor(j/8)%3)*176,up:!faceDown});}render();}
+function bars(){const B1=$('b1'),B2=$('b2');B2.innerHTML='';
+  if(mode==='deal'){B1.innerHTML='<span class="lab">Deal:</span>'+[1,2,3,4,5,6].map(n=>`<button class="go" data-n="${n}">${n}</button>`).join('')+'<button id="flipAll">Flip all</button><button id="sortBtn">Sort</button><button id="gather">Clear the table</button><button id="shuf">Shuffle the deck</button>';
+    B2.innerHTML=`<button id="fdBtn" class="${faceDown?'on':''}">Deal face down</button><button id="totBtn" class="${showTot?'on':''}">Show total</button>`+common();
+    B1.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>dealN(+b.dataset.n));
+    $('flipAll').onclick=()=>{const up=!table.every(t=>t.up);table.forEach(t=>t.up=up);render();};
+    $('sortBtn').onclick=()=>{table.sort((a,b)=>val(a.c)-val(b.c));table.forEach((t,j)=>{t.x=40+(j%8)*118;t.y=30+(Math.floor(j/8)%3)*176;});render();};
+    $('gather').onclick=()=>{table=[];render();};$('shuf').onclick=()=>{table=[];newDeck();render();};
+    $('fdBtn').onclick=e=>{faceDown=!faceDown;e.target.classList.toggle('on',faceDown);};$('totBtn').onclick=e=>{showTot=!showTot;e.target.classList.toggle('on',showTot);render();};}
+  if(mode==='num'){B1.innerHTML=`<span class="lab">Digits:</span><select id="nd">${[2,3,4,5,6,7].map(n=>`<option ${n===nm.d?'selected':''}>${n}</option>`).join('')}</select><span class="lab">Decimal places:</span><select id="np">${[0,1,2,3].map(n=>`<option ${n===nm.p?'selected':''}>${n}</option>`).join('')}</select>
+      <span class="lab">Goal:</span><select id="ng"><option value="big">Make the largest number</option><option value="small">Make the smallest number</option><option value="near">Make the closest to a target</option><option value="free">Free: make any number</option></select><button class="go" id="nDeal">Deal new cards</button><button id="nCheck">✓ Check</button>`;
+    $('ng').value=nm.goal;B2.innerHTML=`<button id="nWords" class="${nm.words?'on':''}">Read it in words</button>`+common();
+    $('nd').onchange=e=>{nm.d=+e.target.value;if(nm.p>=nm.d)nm.p=nm.d-1;bars();numDeal();};$('np').onchange=e=>{nm.p=Math.min(+e.target.value,nm.d-1);bars();numDeal();};$('ng').onchange=e=>{nm.goal=e.target.value;numDeal();};
+    $('nDeal').onclick=numDeal;$('nCheck').onclick=numCheck;$('nWords').onclick=e=>{nm.words=!nm.words;e.target.classList.toggle('on',nm.words);render();};}
+  if(mode==='ten'){B1.innerHTML='<button class="go" id="tDeal">Deal new cards</button><span class="lab">Make:</span><select id="tT"><option value="10">10</option><option value="20">20</option></select><span class="lab">using</span><select id="tK"><option value="2">2 cards</option><option value="any">2 or more cards</option></select>';
+    $('tT').value=String(tn.t);$('tK').value=tn.k;B2.innerHTML=common();$('tDeal').onclick=tenDeal;$('tT').onchange=e=>{tn.t=+e.target.value;if(tn.t===20)tn.k='any';bars();tenDeal();};$('tK').onchange=e=>{tn.k=e.target.value;tenDeal();};}
+  if(mode==='battle'){B1.innerHTML=`<span class="lab">Each player flips</span><select id="bN"><option value="1">1 card</option><option value="2">2 cards</option><option value="3">3 cards</option></select><span class="lab">and</span><select id="bOp"></select><button class="go" id="bFlip">Flip!</button><button id="bReset">Reset scores</button>`;
+    $('bN').value=String(bt.n);bOps();$('bOp').value=bt.op;B2.innerHTML=common();
+    $('bN').onchange=e=>{bt.n=+e.target.value;bOps();bt.hands=null;render();};$('bOp').onchange=e=>{bt.op=e.target.value;bt.hands=null;render();};$('bFlip').onclick=battleFlip;$('bReset').onclick=()=>{bt.score=[0,0];bt.hands=null;render();};}
+  $('pipBtn').onclick=e=>{pips=!pips;e.target.classList.toggle('on',pips);render();};$('tzBtn').onclick=e=>{tenZero=!tenZero;e.target.classList.toggle('on',tenZero);render();};}
+function common(){return `<span style="margin-left:auto"></span><button id="pipBtn" class="${pips?'on':''}">Show pips</button><button id="tzBtn" class="${tenZero?'on':''}" style="display:${mode==='num'?'':'none'}">10 counts as 0</button><span style="color:#64748b">Ace = 1</span>`;}
+function renderDeal(){svg.setAttribute('viewBox','0 0 1000 560');table.sort((a,b)=>(a.top||0)-(b.top||0));table.forEach(t=>t.top=0);
+  table.forEach(t=>{const g=cardSVG(svg,t.c,t.x,t.y,{down:!t.up});draggable(g,t,()=>{t.up=!t.up;});});
+  const up=table.filter(t=>t.up),sum=up.reduce((s,t)=>s+val(t.c),0);
+  $('say').innerHTML=!table.length?'Deal some cards. Tap a card to flip it, and drag cards to move them.':showTot&&up.length?`Face-up cards: ${up.map(t=>val(t.c)).join(' + ')} = <b>${sum}</b>`+(table.length>up.length?` &nbsp; (${table.length-up.length} face down)`:''):`${table.length} card${table.length===1?'':'s'} on the table.`;}
+/* ================= MAKE A NUMBER ================= */
+let nm={d:3,p:0,goal:'big',hand:[],slots:[],target:0,checked:null,words:false,sel:null};
+const PLACE=['Ones','Tens','Hundreds','Thousands','Ten thousands','Hundred thousands','Millions'],DEC=['Tenths','Hundredths','Thousandths'];
+function numDeal(){nm.hand=[];nm.slots=Array(nm.d).fill(null);nm.checked=null;nm.sel=null;for(let i=0;i<nm.d;i++){const c=draw();nm.hand.push({c,x:0,y:0});}layoutHand();
+  if(nm.goal==='near'){const ip=nm.d-nm.p;let t='';for(let i=0;i<ip;i++)t+=String(i===0&&ip>1?1+Math.floor(Math.random()*9):Math.floor(Math.random()*10));if(nm.p){t+='.';for(let i=0;i<nm.p;i++)t+=Math.floor(Math.random()*10);}nm.target=t;}render();}
+function slotX(i){const w=Math.min(130,900/nm.d+0),gap=nm.p?24:0,tot=nm.d*w+gap;return 500-tot/2+i*w+(i>=nm.d-nm.p?gap:0);}
+function slotW(){return Math.min(130,900/nm.d);}
+function layoutHand(){const free=nm.hand.filter(h=>!nm.slots.includes(h));free.forEach((h,j)=>{h.x=500-(free.length*(CW+14))/2+j*(CW+14);h.y=330;});
+  nm.slots.forEach((h,i)=>{if(h){h.x=slotX(i)+(slotW()-CW*Math.min(1,slotW()/(CW+14)))/2;h.y=96;}});}
+function numStr(digits){const ip=nm.d-nm.p;let s=digits.slice(0,ip).join('');if(nm.p)s+='.'+digits.slice(ip).join('');return s;}
+function numVal(s){return parseFloat(s);}
+function perms(a){if(a.length<=1)return [a];const out=[];a.forEach((x,i)=>perms(a.slice(0,i).concat(a.slice(i+1))).forEach(p=>out.push([x].concat(p))));return out;}
+function valid(ds){const ip=nm.d-nm.p;return !(ip>1&&ds[0]===0);}
+function best(){const ds=nm.hand.map(h=>val(h.c));let B=null,bv=null;
+  const cand=nm.d<=7?perms(ds):[ds];for(const p of cand){if(!valid(p))continue;const v=numVal(numStr(p));
+    if(nm.goal==='big'&&(bv===null||v>bv)||nm.goal==='small'&&(bv===null||v<bv)||nm.goal==='near'&&(bv===null||Math.abs(v-numVal(nm.target))<Math.abs(bv-numVal(nm.target)))){bv=v;B=p;}}
+  return {s:B?numStr(B):'',v:bv};}
+const ONES=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'],TENS=['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+function w2(n){return n<20?ONES[n]:TENS[Math.floor(n/10)]+(n%10?'-'+ONES[n%10]:'');}
+function w3(n){const h=Math.floor(n/100),r=n%100;return (h?ONES[h]+' hundred':'')+(h&&r?' and ':'')+(r||!h?w2(r):'');}
+function wInt(n){if(n===0)return 'zero';const m=Math.floor(n/1e6),t=Math.floor(n/1000)%1000,r=n%1000,P=[];if(m)P.push(w3(m)+' million');if(t)P.push(w3(t)+' thousand');if(r)P.push((P.length&&r<100?'and ':'')+w3(r));return P.join(' ');}
+function inWords(s){const [w,f='']=s.split('.');const W=parseInt(w||'0',10);if(!f||!+f)return wInt(W)+(f?' ('+s+')':'');const d=f.length,fn=parseInt(f,10);return (W?wInt(W)+' and ':'')+wInt(fn)+' '+['tenth','hundredth','thousandth'][d-1]+(fn===1?'':'s');}
+function group(s){const [w,f]=s.split('.');const W=w.length>4?w.replace(/\B(?=(\d{3})+(?!\d))/g,' '):w;return f!==undefined?W+'.'+f:W;}
+function numCheck(){if(nm.slots.some(s=>!s)){nm.checked='fill';render();return;}const s=numStr(nm.slots.map(h=>val(h.c)));
+  if(!valid(nm.slots.map(h=>val(h.c)))){nm.checked='zero';render();return;}
+  if(nm.goal==='free'){nm.checked='free';render();return;}const B=best();nm.checked=Math.abs(numVal(s)-B.v)<1e-9?'yes':'no';nm.best=B.s;render();}
+function renderNum(){svg.setAttribute('viewBox','0 0 1000 520');const w=slotW(),ip=nm.d-nm.p,sc=Math.min(1,w/(CW+14));
+  for(let i=0;i<nm.d;i++){const x=slotX(i),name=i<ip?PLACE[ip-1-i]:DEC[i-ip],dec=i>=ip;
+    el('rect',{x:x+3,y:20,width:w-6,height:34,rx:8,fill:dec?'#059669':ip-1-i>=3?'#db2777':'#2563eb'},svg);txt(svg,x+w/2,43,name,w<110?12:14,'#fff','700');
+    const sl=el('rect',{x:x+(w-CW*sc)/2-4,y:92,width:CW*sc+8,height:CH*sc+8,rx:12,fill:'#f1f5f9',stroke:'#94a3b8','stroke-width':2,'stroke-dasharray':'7 5'},svg);
+    sl.addEventListener('pointerdown',()=>{if(nm.sel){placeIn(nm.sel,i);nm.sel=null;render();}});}
+  if(nm.p){const x=slotX(ip)-12;el('circle',{cx:x,cy:92+CH*sc*.8,r:8,fill:'#111827'},svg);}
+  txt(svg,500,312,nm.hand.some(h=>!nm.slots.includes(h))?'Your cards: drag each one into a place (or tap a card, then tap a place)':'',15,'#64748b','600');
+  nm.hand.forEach(h=>{const inS=nm.slots.indexOf(h),g=cardSVG(svg,h.c,h.x,h.y,{w:inS>=0?CW*sc:CW,hl:nm.sel===h?'#2563eb':null});
+    draggable(g,h,()=>{nm.sel=nm.sel===h?null:h;},q=>{let bi=-1,bd=1e9;for(let i=0;i<nm.d;i++){const cx=slotX(i)+w/2,cy=92+CH*sc/2,d=Math.hypot(q.x-cx,q.y-cy);if(d<bd){bd=d;bi=i;}}
+      if(bd<110)placeIn(h,bi);else{const k=nm.slots.indexOf(h);if(k>=0)nm.slots[k]=null;}nm.checked=null;layoutHand();});});
+  const filled=nm.slots.every(Boolean),s=filled?numStr(nm.slots.map(h=>val(h.c))):'';
+  let say=nm.goal==='big'?'Make the <b>largest</b> number you can with these cards.':nm.goal==='small'?'Make the <b>smallest</b> number you can with these cards.':nm.goal==='near'?`Make the number <b>closest to ${group(nm.target)}</b>.`:'Make any number with these cards, then read it.';
+  if(filled)say+=` &nbsp; Your number: <b style="font-size:24px">${group(s)}</b>`+(nm.words?` <span style="color:#475569">(${inWords(s)})</span>`:'');
+  if(nm.checked==='fill')say+='<br>Put a card in every place first.';
+  if(nm.checked==='zero')say+='<br>A whole number doesn\'t start with 0. Move the 0 to another place.';
+  if(nm.checked==='yes')say+='<br>✓ <b>Yes!</b> That is the '+(nm.goal==='big'?'largest':nm.goal==='small'?'smallest':'closest')+' number you can make.';
+  if(nm.checked==='no')say+=`<br>✗ Not quite. You can make <b>${group(nm.best)}</b>. `+(nm.goal==='big'?'Put the biggest digits in the biggest places.':nm.goal==='small'?'Put the smallest digits in the biggest places.':'Start with the biggest place, then work right.');
+  if(nm.checked==='free')say+=`<br>You made <b>${group(s)}</b>: ${inWords(s)}.`;
+  $('say').innerHTML=say;}
+function placeIn(h,i){const old=nm.slots.indexOf(h),cur=nm.slots[i];if(old>=0)nm.slots[old]=cur||null;nm.slots[i]=h;nm.checked=null;layoutHand();}
+/* ================= MAKE 10 ================= */
+let tn={t:10,k:'2',cards:[],sel:new Set(),found:0,msg:''};
+function tenDeal(){tn.cards=[];tn.sel=new Set();tn.found=0;tn.msg='';for(let i=0;i<12;i++)tn.cards.push(draw());render();}
+function tenTap(i){if(!tn.cards[i])return;tn.sel.has(i)?tn.sel.delete(i):tn.sel.add(i);tn.msg='';
+  const S=[...tn.sel],sum=S.reduce((s,j)=>s+tn.cards[j].r,0),need=tn.k==='2'?2:0;
+  if(sum===tn.t&&(tn.k!=='2'||S.length===2||(S.length===1&&tn.t===10&&tn.cards[S[0]].r===10))){tn.msg=`✓ ${S.map(j=>tn.cards[j].r).join(' + ')} = ${tn.t}`;tn.found++;S.forEach(j=>tn.cards[j]=deck.length?draw():null);tn.sel.clear();}
+  else if(sum>tn.t||(tn.k==='2'&&S.length===2)){tn.msg=`✗ ${S.map(j=>tn.cards[j].r).join(' + ')} = ${sum}, not ${tn.t}.`;tn.sel.clear();}
+  render();}
+function renderTen(){svg.setAttribute('viewBox','0 0 1000 400');tn.cards.forEach((c,i)=>{if(!c)return;const x=40+(i%6)*158,y=20+Math.floor(i/6)*190,g=cardSVG(svg,c,x+10,y,{hl:tn.sel.has(i)?'#2563eb':null});
+    if(tn.sel.has(i))g.setAttribute('transform',`translate(${x+10} ${y-8})`);g.style.cursor='pointer';g.addEventListener('pointerdown',()=>tenTap(i));});
+  const S=[...tn.sel],sum=S.reduce((s,j)=>s+tn.cards[j].r,0);
+  $('say').innerHTML=(tn.msg?tn.msg+' &nbsp; ':'')+(S.length?`Selected: ${S.map(j=>tn.cards[j].r).join(' + ')} = ${sum}. `:`Tap ${tn.k==='2'?'two cards':'cards'} that add to <b>${tn.t}</b>${tn.t===10&&tn.k==='2'?' (a 10 on its own counts too)':''}. `)+`Found: <b>${tn.found}</b>`;}
+/* ================= CARD BATTLE ================= */
+let bt={n:1,op:'big',hands:null,score:[0,0]};
+const OPS={1:[['big','bigger card wins'],['small','smaller card wins']],2:[['add','add them (+)'],['sub','find the difference (−)'],['mul','multiply them (×)'],['num','make the biggest 2-digit number']],3:[['add','add them (+)'],['num','make the biggest 3-digit number']]};
+function bOps(){$('bOp').innerHTML=OPS[bt.n].map(([v,t])=>`<option value="${v}">${t}</option>`).join('');if(!OPS[bt.n].some(o=>o[0]===bt.op))bt.op=OPS[bt.n][0][0];$('bOp').value=bt.op;}
+function result(cs){const v=cs.map(val);if(bt.op==='big'||bt.op==='small')return {v:v[0],s:String(v[0])};
+  if(bt.op==='add'){const t=v.reduce((a,b)=>a+b,0);return {v:t,s:v.join(' + ')+' = '+t};}
+  if(bt.op==='sub'){const t=Math.abs(v[0]-v[1]);return {v:t,s:Math.max(...v)+' − '+Math.min(...v)+' = '+t};}
+  if(bt.op==='mul'){const t=v[0]*v[1];return {v:t,s:v.join(' × ')+' = '+t};}
+  const d=v.slice().sort((a,b)=>b-a),s=d.join('');return {v:+s,s:s};}
+function battleFlip(){if(deck.length<2*bt.n)newDeck();bt.hands=[[],[]];for(let i=0;i<bt.n;i++){bt.hands[0].push(draw());bt.hands[1].push(draw());}
+  const r=bt.hands.map(result),win=bt.op==='small'?(r[0].v<r[1].v?0:r[1].v<r[0].v?1:-1):(r[0].v>r[1].v?0:r[1].v>r[0].v?1:-1);bt.win=win;bt.res=r;if(win>=0)bt.score[win]++;render();}
+function renderBattle(){svg.setAttribute('viewBox','0 0 1000 420');
+  [0,1].forEach(p=>{const x0=p?520:20;el('rect',{x:x0,y:10,width:460,height:400,rx:18,fill:bt.hands&&bt.win===p?'#dcfce7':'#f8fafc',stroke:bt.hands&&bt.win===p?'#16a34a':'#cbd5e1','stroke-width':3},svg);
+    txt(svg,x0+230,46,`Player ${p+1}`,24,'#1f2937','800');txt(svg,x0+230,76,`Score: ${bt.score[p]}`,18,'#475569','700');
+    const n=bt.n,w=n===3?100:CW;for(let i=0;i<n;i++){const x=x0+230-(n*(w+12))/2+i*(w+12)+6;if(bt.hands)cardSVG(svg,bt.hands[p][i],x,100,{w});else cardSVG(svg,null,x,100,{w,down:true});}
+    if(bt.hands){txt(svg,x0+230,330,bt.res[p].s,30,'#111827','800');if(bt.win===p)txt(svg,x0+230,375,'🏆 wins this round',20,'#15803d','800');}});
+  $('say').innerHTML=!bt.hands?'Press <b>Flip!</b> Each player turns over '+(bt.n===1?'a card':bt.n+' cards')+'.':bt.win<0?'It\'s a tie! Flip again.':`Player ${bt.win+1} wins: ${bt.res[bt.win].s.split('=').pop().trim()} is ${bt.op==='small'?'smaller':'bigger'} than ${bt.res[1-bt.win].s.split('=').pop().trim()}.`;}
+/* ================= modes ================= */
+const HINT={deal:'Deal cards face up or face down. Tap a card to flip it; drag cards to move them. Use for subitising pips, adding cards, ordering and number talks.',
+  num:'Drag each card into a place (or tap a card, then tap a place). Choose how many digits and decimal places. Turn on "10 counts as 0" so a 10 card can be used as the digit 0.',
+  ten:'Tap cards that add to the target. They are replaced from the deck. Friends of 10 and 20.',
+  battle:'Two players (or two teams) flip cards. Compare, add, subtract or multiply; the biggest result wins the round.'};
+function render(){svg.innerHTML='';if(mode==='deal')renderDeal();if(mode==='num')renderNum();if(mode==='ten')renderTen();if(mode==='battle')renderBattle();$('deckInfo').textContent=`Deck: ${deck.length} of 40 cards left`;}
+function setMode(m){mode=m;document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));$('hint').textContent=HINT[m];
+  if(m==='num'){tenZero=true;}bars();if(m==='num'&&!nm.hand.length)numDeal();if(m==='ten'&&!tn.cards.length)tenDeal();render();}
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+newDeck();setMode('deal');
+</script></body></html>

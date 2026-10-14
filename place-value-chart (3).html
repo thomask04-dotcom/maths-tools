@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Place Value Chart</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;font-size:14px}
+.title{font-weight:700;margin-right:6px;font-size:16px}
+button,input,select{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937}
+button{cursor:pointer}
+button:hover{border-color:#94a3b8}
+button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+button.stg{font-weight:700}
+button.op{font-weight:700;min-width:52px}
+.lab{font-weight:700;color:#334155}
+input{width:130px}
+#num{margin-left:auto;font-size:24px;font-weight:800;padding:2px 14px;background:#fff;border:1px solid #e5e7eb;border-radius:8px}
+#exp{font-size:17px;padding:6px 12px;color:#374151;line-height:1.5}
+#msg{color:#b45309;font-weight:600}
+svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{font-size:13px;color:#6b7280;padding:6px 10px}
+</style></head><body>
+<div class="bar"><span class="title">Place Value Chart</span>
+<button class="stg" data-stage="1">Stage 1</button><button class="stg" data-stage="2">Stage 2</button><button class="stg" data-stage="3">Stage 3</button>
+<label>Make <input id="make" placeholder="e.g. 342 or 4056.25"></label><button id="makeBtn">Go</button><button id="clearBtn">Clear</button>
+<span id="num">0</span>
+</div>
+<div class="bar">
+<span class="lab">Show as:</span><button data-rep="b10">🧊 Base-10 blocks</button><button data-rep="cnt">● Counters</button><button data-rep="dig">7 Numbers</button>
+<span class="lab" style="margin-left:8px">Biggest place:</span><select id="maxSel"></select>
+<span class="lab">Smallest place:</span><select id="minSel"></select>
+<button id="wholeBtn">1 whole = mini</button>
+</div>
+<div class="bar">
+<button id="valBtn" class="on">Show number</button><button id="wordBtn">Number in words</button><button id="expBtn" class="on">Expanded form</button><button id="opsBtn">× ÷ by 10, 100, 1000</button><button id="slideBtn">Hide leading zeros</button>
+<span id="msg"></span>
+</div>
+<div class="bar" id="opsBar" style="display:none">
+<button class="op" data-p="1">× 10</button><button class="op" data-p="2">× 100</button><button class="op" data-p="3">× 1000</button>
+<button class="op" data-p="-1">÷ 10</button><button class="op" data-p="-2">÷ 100</button><button class="op" data-p="-3">÷ 1000</button>
+<span style="color:#475569">Every digit moves; the decimal point stays still.</span>
+</div>
+<svg id="svg" viewBox="0 0 1000 560"></svg>
+<div id="exp"></div>
+<div class="hint" id="hint"></div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,fs,fill,anchor,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':anchor||'middle','font-weight':wt||'normal','pointer-events':'none'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById(id);
+const svg=$('svg');
+const COLS=[
+ {e:6,n:'Millions',v:'1 000 000',c:'#7c3aed'},
+ {e:5,n:'Hundred thousands',v:'100 000',c:'#db2777'},{e:4,n:'Ten thousands',v:'10 000',c:'#db2777'},{e:3,n:'Thousands',v:'1000',c:'#db2777'},
+ {e:2,n:'Hundreds',v:'100',c:'#2563eb'},{e:1,n:'Tens',v:'10',c:'#2563eb'},{e:0,n:'Ones',v:'1',c:'#2563eb'},
+ {e:-1,n:'Tenths',v:'0.1',c:'#059669'},{e:-2,n:'Hundredths',v:'0.01',c:'#059669'},{e:-3,n:'Thousandths',v:'0.001',c:'#059669'}];
+const cnt={};COLS.forEach(c=>cnt[c.e]=0);
+let rep='b10',maxE=2,minE=0,off=0,slide=false,animS=null,showV=true,words=false,expd=true,wholeAuto=true,bigWhole=false;
+const vis=()=>COLS.filter(c=>c.e<=maxE&&c.e>=minE);
+// total in thousandths (integer, avoids float errors)
+function total(){return COLS.reduce((s,c)=>s+cnt[c.e]*10**(c.e+3),0);}
+function group(s){return s.length>4?s.replace(/\B(?=(\d{3})+(?!\d))/g,' '):s;}
+function fmtT(t){const w=Math.floor(t/1000),f=t%1000;let s=group(String(w));if(f){s+='.'+String(f).padStart(3,'0').replace(/0+$/,'');}return s;}
+/* ---------- number in words (Australian: "three hundred and forty-two") ---------- */
+const ONES=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'],TENS=['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+function w2(n){return n<20?ONES[n]:TENS[Math.floor(n/10)]+(n%10?'-'+ONES[n%10]:'');}
+function w3(n){const h=Math.floor(n/100),r=n%100;return (h?ONES[h]+' hundred':'')+(h&&r?' and ':'')+(r||!h?w2(r):'');}
+function wInt(n){if(n===0)return 'zero';const m=Math.floor(n/1e6),t=Math.floor(n/1000)%1000,r=n%1000,P=[];
+  if(m)P.push(w3(m)+' million');if(t)P.push(w3(t)+' thousand');if(r)P.push((P.length&&r<100?'and ':'')+w3(r));return P.join(' ');}
+function inWords(T){const w=Math.floor(T/1000),f=T%1000;if(!f)return wInt(w);
+  const fs=String(f).padStart(3,'0').replace(/0+$/,''),d=fs.length,fn=+fs,unit=['tenth','hundredth','thousandth'][d-1]+(fn===1?'':'s');
+  return (w?wInt(w)+' and ':'')+wInt(fn)+' '+unit;}
+/* ---------- base-10 blocks ---------- */
+// block shape cycles: cube (1) -> long (10) -> flat (100) -> bigger cube (1000) ...
+function bIdx(e){return e+(bigWhole?3:0);}
+function bKind(e){return ['cube','long','flat'][((bIdx(e)%3)+3)%3];}
+function bName(e){const i=bIdx(e),t=Math.floor(i/3),k=bKind(e);
+  if(k==='cube')return ['tiny cube','mini','block','mega block','giga block'][t+1]||'cube';
+  return (['tiny ','','big ','mega ','giga '][t+1]||'')+k;}
+function shade(hex,f){const n=parseInt(hex.slice(1),16),r=n>>16,g=n>>8&255,b=n&255,m=v=>Math.round(f<0?v*(1+f):v+(255-v)*f);return `rgb(${m(r)},${m(g)},${m(b)})`;}
+function faces(g,x,y,w,h,d,col){el('path',{d:`M${x} ${y}l${d} ${-d}h${w}l${-d} ${d}z`,fill:shade(col,.35),stroke:shade(col,-.45),'stroke-width':1},g);
+  el('path',{d:`M${x+w} ${y}l${d} ${-d}v${h}l${-d} ${d}z`,fill:shade(col,-.2),stroke:shade(col,-.45),'stroke-width':1},g);
+  el('rect',{x,y,width:w,height:h,fill:col,stroke:shade(col,-.45),'stroke-width':1},g);}
+function cube3(g,x,y,s,col){faces(g,x,y,s,s,s*.35,col);}
+function long3(g,x,y,w,h,col){faces(g,x,y,w,h,w*.5,col);for(let i=1;i<10;i++)el('line',{x1:x,x2:x+w,y1:y+i*h/10,y2:y+i*h/10,stroke:shade(col,-.35),'stroke-width':.7},g);}
+function flat3(g,x,y,s,col){faces(g,x,y,s,s,s*.1,col);for(let i=1;i<10;i++){el('line',{x1:x,x2:x+s,y1:y+i*s/10,y2:y+i*s/10,stroke:shade(col,-.3),'stroke-width':.5},g);el('line',{y1:y,y2:y+s,x1:x+i*s/10,x2:x+i*s/10,stroke:shade(col,-.3),'stroke-width':.5},g);}}
+function drawBlocks(c,x,cw,Y0,Y1,k){const kind=bKind(c.e),col=c.c,H=Y1-Y0-40,top=Y0+16,big=Math.floor(bIdx(c.e)/3)>=1;
+  const add=fn=>{const g=el('g',{style:'cursor:pointer'},svg);fn(g);const bb=g.getBBox();el('rect',{x:bb.x,y:bb.y,width:bb.width,height:bb.height,fill:'transparent'},g);g.addEventListener('pointerdown',ev=>{ev.stopPropagation();cnt[c.e]--;msg('');render();});};
+  const lay=(sp,per,vs,fn)=>{for(let j=0;j<k;j++){const cl=j%per,rw=Math.floor(j/per);add(g=>fn(g,x+cw/2-(per*sp)/2+cl*sp+3+off,rw*vs));}};
+  if(kind==='cube'&&big){const s=Math.min(78,cw-40),d=s*.35,sp=s+d+8,per=Math.max(1,Math.floor((cw-8)/sp)),rows=Math.ceil(k/per),vs=Math.min(s+d+8,(H-s-d)/Math.max(1,rows-1));lay(sp,per,vs,(g,X,dy)=>cube3(g,X,top+d+dy,s,col));}
+  else if(kind==='cube'){const s=Math.min(30,(cw-14)/3.6),sp=s*1.35+4,per=Math.max(1,Math.min(5,Math.floor((cw-8)/sp))),rows=Math.ceil(k/per),vs=Math.min(sp,(H-s)/Math.max(1,rows-1));lay(sp,per,vs,(g,X,dy)=>cube3(g,X,top+s*.35+dy,s,col));}
+  if(kind==='long'){const w=Math.min(15,(cw-10)/7),h=Math.min(170,w*10),sp=w*1.5+5,per=Math.max(1,Math.min(10,Math.floor((cw-8)/sp))),rows=Math.ceil(k/per),vs=Math.min(h+w*.5+10,(H-h-w*.5)/Math.max(1,rows-1));lay(sp,per,vs,(g,X,dy)=>long3(g,X,top+w*.5+dy,w,h,col));}
+  if(kind==='flat'){const s=Math.min(115,cw-26),sp=s*1.1+8,per=Math.max(1,Math.floor((cw-10)/sp)),rows=Math.ceil(k/per),vs=Math.min(s*1.1+10,(H-s*1.1)/Math.max(1,rows-1));lay(sp,per,vs,(g,X,dy)=>flat3(g,X,top+s*.1+dy,s,col));}
+  txt(svg,x+cw/2,Y1-8,bName(c.e)+'s',13,'#64748b','middle','600');}
+/* ---------- draw ---------- */
+function render(){
+  svg.innerHTML='';
+  if(rep==='b10'&&wholeAuto)bigWhole=minE<0||!!(cnt[-1]||cnt[-2]||cnt[-3]);
+  $('wholeBtn').textContent=bigWhole?'1 whole = block':'1 whole = mini';$('wholeBtn').style.display=rep==='b10'?'':'none';
+  const V=vis(),cw=1000/V.length,HY=78,BY0=HY,BY1=rep==='dig'?470:410,dig=rep==='dig';
+  const nz=V.map((q,i)=>cnt[q.e]?i:-1).filter(i=>i>=0),first=nz.length?nz[0]:-1,last=nz.length?nz[nz.length-1]:-1,onesI=V.findIndex(q=>q.e===0);
+  const hide=i=>slide&&cnt[V[i].e]===0&&(first<0?i!==onesI:((i<first&&i<onesI)||i>Math.max(last,onesI)));
+  V.forEach((c,i)=>{
+    const x=i*cw,k=cnt[c.e];
+    el('rect',{x,y:0,width:cw,height:HY,fill:c.c},svg);
+    const wds=c.n.split(' '),fs=cw<95?13:cw<140?15:18;
+    if(wds.length>1&&cw<170){txt(svg,x+cw/2,26,wds[0],fs,'#fff','middle','700');txt(svg,x+cw/2,26+fs+2,wds[1],fs,'#fff','middle','700');}
+    else txt(svg,x+cw/2,36,c.n,fs,'#fff','middle','700');
+    txt(svg,x+cw/2,70,c.v,cw<95?12:14,'#fff');
+    const body=el('rect',{x,y:BY0,width:cw,height:BY1-BY0,fill:i%2?'#f8fafc':'#fff',style:dig?'':'cursor:copy'},svg);
+    if(dig){// numeral card with up/down arrows
+      const fsD=Math.min(150,cw*.75),d=hide(i)?'':String(k),cy=(BY0+BY1)/2;
+      el('rect',{x:x+cw*.12,y:cy-fsD*.62,width:cw*.76,height:fsD*1.12,rx:12,fill:'#fff',stroke:k>9?'#dc2626':'#cbd5e1','stroke-width':k>9?3:2},svg);
+      txt(svg,x+cw/2+off,cy+fsD*.33,d,k>9?fsD*.6:fsD,k>9?'#dc2626':(k===0?'#94a3b8':c.c),'middle','800');
+      const arrow=(y,up)=>{const g=el('g',{style:'cursor:pointer'},svg),w=Math.min(64,cw*.6);el('rect',{x:x+cw/2-w/2,y,width:w,height:40,rx:10,fill:'#fff',stroke:'#94a3b8','stroke-width':1.5},g);txt(g,x+cw/2,y+28,up?'▲':'▼',22,'#334155','middle','700');
+        g.addEventListener('pointerdown',ev=>{ev.stopPropagation();if(up)cnt[c.e]=k>=9?0:k+1;else cnt[c.e]=k<=0?9:k-1;msg('');render();});};
+      arrow(BY0+12,true);arrow(BY1-52,false);
+    } else {
+      body.addEventListener('pointerdown',()=>{cnt[c.e]++;msg('');render();});
+      if(rep==='b10')drawBlocks(c,x,cw,BY0,BY1,k);
+      else{const per=cw>=220?5:cw>=150?4:cw>=90?3:2,sp=Math.min(42,(cw-12)/per),rows=Math.ceil(k/per),vsp=Math.min(sp,(BY1-BY0-24)/Math.max(rows,1)),r=Math.min(17,sp/2-2,vsp/2-1);
+        for(let j=0;j<k;j++){const col=j%per,row=Math.floor(j/per),cx=x+cw/2+(col-(per-1)/2)*sp,cy=BY0+12+r+row*vsp;
+          const d=el('circle',{cx:cx+off,cy,r,fill:c.c,stroke:'#fff','stroke-width':1.5,style:'cursor:pointer'},svg);
+          d.addEventListener('pointerdown',ev=>{ev.stopPropagation();cnt[c.e]--;msg('');render();});}}
+      // digit box
+      el('rect',{x:x+4,y:BY1+8,width:cw-8,height:54,rx:8,fill:k>9?'#fee2e2':'#fff',stroke:k>9?'#dc2626':'#cbd5e1','stroke-width':k>9?2:1},svg);
+      txt(svg,x+cw/2+off,BY1+46,showV?(hide(i)?'':String(k)):'?',k>9?24:30,k>9?'#dc2626':(k===0?'#94a3b8':'#111827'),'middle','700');
+      // trade buttons
+      const left=V[i-1],right=V[i+1];
+      const btn=(by,label,en,fn)=>{const g=el('g',{style:en?'cursor:pointer':'',opacity:en?1:.3},svg);el('rect',{x:x+6,y:by,width:cw-12,height:26,rx:6,fill:'#fff',stroke:'#94a3b8'},g);txt(g,x+cw/2,by+18,label,cw<95?11:13,'#1f2937','middle','600');if(en)g.addEventListener('pointerdown',fn);};
+      btn(BY1+70,cw<130?'← 10 for 1':'← trade 10 for 1',!!left&&k>=10,()=>{cnt[c.e]-=10;cnt[left.e]++;msg('');render();});
+      btn(BY1+100,cw<130?'1 for 10 →':'trade 1 for 10 →',!!right&&k>=1,()=>{cnt[c.e]--;cnt[right.e]+=10;msg('');render();});
+    }
+    if(i)el('line',{x1:x,x2:x,y1:0,y2:dig?BY1:BY1,stroke:c.e===-1?'#111827':'#cbd5e1','stroke-width':c.e===-1?4:1},svg);
+    if(c.e===-1)el('circle',{cx:x,cy:dig?(BY0+BY1)/2+40:BY1+36,r:dig?9:6,fill:'#111827'},svg);
+  });
+  svg.setAttribute('viewBox',`0 0 1000 ${dig?BY1+10:BY1+134}`);
+  const t=total();
+  $('num').textContent=showV?fmtT(t):'?';
+  const parts=COLS.filter(c=>cnt[c.e]).map(c=>fmtT(cnt[c.e]*10**(c.e+3)));
+  const L=[];
+  if(showV&&words&&t)L.push('<b>In words:</b> '+inWords(t));
+  if(showV&&expd&&parts.length>1)L.push('<b>Expanded:</b> '+parts.join(' + ')+' = '+fmtT(t));
+  if(rep==='b10'){const used=COLS.filter(c=>cnt[c.e]).map(c=>cnt[c.e]+' '+bName(c.e)+(cnt[c.e]===1?'':'s'));L.push(`<b>1 whole = ${bigWhole?'1 block (big cube)':'1 mini (small cube)'}.</b> `+(used.length?used.join(', ')+(showV?' = '+fmtT(t):''):''));}
+  if(V.some(c=>cnt[c.e]>9))L.push('<span style="color:#b91c1c">A column has 10 or more. Trade 10 of them for 1 in the next place to the left.</span>');
+  $('exp').innerHTML=L.join('<br>');
+}
+function slideAnim(d){cancelAnimationFrame(animS);const t0=performance.now();const step=now=>{const k=Math.min(1,(now-t0)/800),e=1-Math.pow(1-k,3);off=d*(1-e);render();if(k<1)animS=requestAnimationFrame(step);else off=0;};animS=requestAnimationFrame(step);}
+function msg(s){$('msg').textContent=s;}
+function shift(p){
+  for(const c of COLS)if(cnt[c.e]&&(c.e+p>maxE||c.e+p<minE)){msg(p>0?'Too big for these columns. Choose a bigger "Biggest place".':'Too small for these columns. Choose a smaller "Smallest place".');return;}
+  const old={...cnt};COLS.forEach(c=>cnt[c.e]=0);COLS.forEach(c=>{if(old[c.e])cnt[c.e+p]=old[c.e];});
+  slideAnim(p*1000/vis().length);msg((p>0?'× ':'÷ ')+10**Math.abs(p)+': every digit moved '+Math.abs(p)+' place'+(Math.abs(p)>1?'s':'')+' to the '+(p>0?'left':'right')+'.');render();}
+document.querySelectorAll('.op').forEach(b=>b.onclick=()=>shift(+b.dataset.p));
+/* ---------- settings ---------- */
+function fillSelects(){
+  $('maxSel').innerHTML=COLS.filter(c=>c.e>=1).map(c=>`<option value="${c.e}" ${c.e===maxE?'selected':''}>${c.n}</option>`).join('');
+  $('minSel').innerHTML=COLS.filter(c=>c.e<=0).map(c=>`<option value="${c.e}" ${c.e===minE?'selected':''}>${c.n}${c.e===0?' (no decimals)':''}</option>`).join('');}
+function setRange(mx,mn){const lost=COLS.filter(c=>(c.e>mx||c.e<mn)&&cnt[c.e]);lost.forEach(c=>cnt[c.e]=0);maxE=mx;minE=mn;fillSelects();if(lost.length)msg('Cleared the '+lost.map(c=>c.n.toLowerCase()).join(', ')+' column'+(lost.length>1?'s':'')+'.');}
+$('maxSel').onchange=e=>{setRange(+e.target.value,minE);render();};
+$('minSel').onchange=e=>{setRange(maxE,+e.target.value);render();};
+function setRep(r){rep=r;document.querySelectorAll('[data-rep]').forEach(b=>b.classList.toggle('on',b.dataset.rep===r));
+  if(r==='dig'&&COLS.some(c=>cnt[c.e]>9))msg('Some columns had 10 or more. Trade them first, or they show in red.');
+  $('hint').textContent=r==='dig'?'Use ▲ and ▼ to change each digit. Use "Hide leading zeros" to show how the number is written. Choose how many places to show with "Biggest place" and "Smallest place".'
+   :'Tap inside a column to add '+(r==='b10'?'a block':'a counter')+', or tap '+(r==='b10'?'a block':'a counter')+' to remove it. When a column has 10 or more, trade 10 of them for 1 in the next place to the left. Trade 1 for 10 to break it into the next place to the right.'+(r==='b10'?' With decimals showing, the block (big cube) is 1 whole: flat = 0.1, long = 0.01, mini = 0.001.':'');
+  render();}
+document.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>setRep(b.dataset.rep));
+function toggle(id,get,set){$(id).onclick=e=>{set(!get());e.target.classList.toggle('on',get());render();};}
+toggle('valBtn',()=>showV,v=>showV=v);toggle('wordBtn',()=>words,v=>words=v);toggle('expBtn',()=>expd,v=>expd=v);toggle('slideBtn',()=>slide,v=>slide=v);
+$('opsBtn').onclick=e=>{const on=$('opsBar').style.display==='none';$('opsBar').style.display=on?'':'none';e.target.classList.toggle('on',on);};
+$('wholeBtn').onclick=()=>{wholeAuto=false;bigWhole=!bigWhole;render();};
+const STAGES={1:{mx:2,mn:0,rep:'b10',ops:false},2:{mx:4,mn:-2,rep:'b10',ops:false},3:{mx:6,mn:-3,rep:'cnt',ops:true}};
+function setStage(n){const S=STAGES[n];document.querySelectorAll('[data-stage]').forEach(b=>b.classList.toggle('on',+b.dataset.stage===n));
+  COLS.forEach(c=>cnt[c.e]=0);setRange(S.mx,S.mn);msg('');wholeAuto=true;$('opsBar').style.display=S.ops?'':'none';$('opsBtn').classList.toggle('on',S.ops);setRep(S.rep);}
+document.querySelectorAll('[data-stage]').forEach(b=>b.onclick=()=>setStage(+b.dataset.stage));
+$('makeBtn').onclick=()=>{
+  const s=$('make').value.replace(/[\s,]/g,'');
+  if(!/^\d*\.?\d*$/.test(s)||s===''||s==='.'){msg('Type a number like 4056.2');return;}
+  const [w,f='']=s.split('.');const W=w.replace(/^0+/,'');
+  if(f.length>3||W.length>7){msg('That number needs more places than this chart has.');return;}
+  COLS.forEach(c=>cnt[c.e]=0);
+  setRange(Math.max(maxE,W.length-1,1),Math.min(minE,f.replace(/0+$/,'').length?-f.length:0));
+  [...W].forEach((d,i)=>cnt[W.length-1-i]=+d);[...f].forEach((d,i)=>cnt[-1-i]=+d);msg('');render();};
+$('make').addEventListener('keydown',e=>{if(e.key==='Enter')$('makeBtn').click();});
+$('clearBtn').onclick=()=>{COLS.forEach(c=>cnt[c.e]=0);msg('');render();};
+// link options, e.g. place-value-chart.html?stage=2&show=dig
+const Q=new URLSearchParams(location.search);
+setStage(+Q.get('stage')||1);
+if(Q.get('show')&&['b10','cnt','dig'].includes(Q.get('show')))setRep(Q.get('show'));
+</script></body></html>
