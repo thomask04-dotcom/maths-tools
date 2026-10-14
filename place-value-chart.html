@@ -75,6 +75,7 @@ function inWords(T){const w=Math.floor(T/1000),f=T%1000;if(!f)return wInt(w);
 function bIdx(e){return e+(bigWhole?3:0);}
 function bKind(e){return ['cube','long','flat'][((bIdx(e)%3)+3)%3];}
 function bName(e){const i=bIdx(e),t=Math.floor(i/3),k=bKind(e);
+  if(t===-1)return {flat:'tenth slice',long:'hundredth stick',cube:'thousandth cube'}[k];
   if(k==='cube')return ['tiny cube','mini','block','mega block','giga block'][t+1]||'cube';
   return (['tiny ','','big ','mega ','giga '][t+1]||'')+k;}
 function shade(hex,f){const n=parseInt(hex.slice(1),16),r=n>>16,g=n>>8&255,b=n&255,m=v=>Math.round(f<0?v*(1+f):v+(255-v)*f);return `rgb(${m(r)},${m(g)},${m(b)})`;}
@@ -84,18 +85,27 @@ function faces(g,x,y,w,h,d,col){el('path',{d:`M${x} ${y}l${d} ${-d}h${w}l${-d} $
 function cube3(g,x,y,s,col){faces(g,x,y,s,s,s*.35,col);}
 function long3(g,x,y,w,h,col){faces(g,x,y,w,h,w*.5,col);for(let i=1;i<10;i++)el('line',{x1:x,x2:x+w,y1:y+i*h/10,y2:y+i*h/10,stroke:shade(col,-.35),'stroke-width':.7},g);}
 function flat3(g,x,y,s,col){faces(g,x,y,s,s,s*.1,col);for(let i=1;i<10;i++){el('line',{x1:x,x2:x+s,y1:y+i*s/10,y2:y+i*s/10,stroke:shade(col,-.3),'stroke-width':.5},g);el('line',{y1:y,y2:y+s,x1:x+i*s/10,x2:x+i*s/10,stroke:shade(col,-.3),'stroke-width':.5},g);}}
-function drawBlocks(c,x,cw,Y0,Y1,k){const kind=bKind(c.e),col=c.c,H=Y1-Y0-40,top=Y0+16,big=Math.floor(bIdx(c.e)/3)>=1;
-  const add=fn=>{const g=el('g',{style:'cursor:pointer'},svg);fn(g);const bb=g.getBBox();el('rect',{x:bb.x,y:bb.y,width:bb.width,height:bb.height,fill:'transparent'},g);g.addEventListener('pointerdown',ev=>{ev.stopPropagation();cnt[c.e]--;msg('');render();});};
+function drawBlocks(c,x,cw,Y0,Y1,k){const kind=bKind(c.e),col=c.c,H=Y1-Y0-40,top=Y0+16,tier=Math.floor(bIdx(c.e)/3),M=Math.min(30,(cw-14)/3.6);// M = size of a mini
+  const add=fn=>{const g=el('g',{style:'cursor:pointer'},svg);fn(g);const bb=g.getBBox();el('rect',{x:bb.x-3,y:bb.y-3,width:bb.width+6,height:bb.height+6,fill:'transparent'},g);g.addEventListener('pointerdown',ev=>{ev.stopPropagation();cnt[c.e]--;msg('');render();});};
   const lay=(sp,per,vs,fn)=>{for(let j=0;j<k;j++){const cl=j%per,rw=Math.floor(j/per);add(g=>fn(g,x+cw/2-(per*sp)/2+cl*sp+3+off,rw*vs));}};
-  if(kind==='cube'&&big){const s=Math.min(78,cw-40),d=s*.35,sp=s+d+8,per=Math.max(1,Math.floor((cw-8)/sp)),rows=Math.ceil(k/per),vs=Math.min(s+d+8,(H-s-d)/Math.max(1,rows-1));lay(sp,per,vs,(g,X,dy)=>cube3(g,X,top+d+dy,s,col));}
-  else if(kind==='cube'){const s=Math.min(30,(cw-14)/3.6),sp=s*1.35+4,per=Math.max(1,Math.min(5,Math.floor((cw-8)/sp))),rows=Math.ceil(k/per),vs=Math.min(sp,(H-s)/Math.max(1,rows-1));lay(sp,per,vs,(g,X,dy)=>cube3(g,X,top+s*.35+dy,s,col));}
-  if(kind==='long'){const w=Math.min(15,(cw-10)/7),h=Math.min(170,w*10),sp=w*1.5+5,per=Math.max(1,Math.min(10,Math.floor((cw-8)/sp))),rows=Math.ceil(k/per),vs=Math.min(h+w*.5+10,(H-h-w*.5)/Math.max(1,rows-1));lay(sp,per,vs,(g,X,dy)=>long3(g,X,top+w*.5+dy,w,h,col));}
-  if(kind==='flat'){const s=Math.min(115,cw-26),sp=s*1.1+8,per=Math.max(1,Math.floor((cw-10)/sp)),rows=Math.ceil(k/per),vs=Math.min(s*1.1+10,(H-s*1.1)/Math.max(1,rows-1));lay(sp,per,vs,(g,X,dy)=>flat3(g,X,top+s*.1+dy,s,col));}
-  txt(svg,x+cw/2,Y1-8,bName(c.e)+'s',13,'#64748b','middle','600');}
+  const grid=(w,h,gapX,gapY,maxPer)=>{const sp=w+gapX,per=Math.max(1,Math.min(maxPer||99,Math.floor((cw-10)/sp))),rows=Math.ceil(k/per),vs=Math.min(h+gapY,(H-h)/Math.max(1,rows-1));return [sp,per,vs];};
+  if(tier>=1){// bigger than a mini: long = 10, flat = 100, block = 1000 ...
+    if(kind==='cube'){const s=Math.min(78,cw-40),d=s*.35,[sp,per,vs]=grid(s+d,s+d,8,8);lay(sp,per,vs,(g,X,dy)=>cube3(g,X,top+d+dy,s,col));}
+    if(kind==='long'){const w=Math.min(15,(cw-10)/7),h=Math.min(170,w*10),[sp,per,vs]=grid(w*1.5,h+w*.5,5,10,10);lay(sp,per,vs,(g,X,dy)=>long3(g,X,top+w*.5+dy,w,h,col));}
+    if(kind==='flat'){const s=Math.min(115,cw-26),[sp,per,vs]=grid(s*1.1,s*1.1,8,10);lay(sp,per,vs,(g,X,dy)=>flat3(g,X,top+s*.1+dy,s,col));}}
+  else if(tier===0){// the mini (1), or long/flat when the mini is a smaller unit
+    if(kind==='cube'){const s=M,[sp,per,vs]=grid(s*1.35,s*1.35,4,4,5);lay(sp,per,vs,(g,X,dy)=>cube3(g,X,top+s*.35+dy,s,col));}
+    if(kind==='long'){const w=Math.min(15,(cw-10)/7),h=Math.min(170,w*10),[sp,per,vs]=grid(w*1.5,h+w*.5,5,10,10);lay(sp,per,vs,(g,X,dy)=>long3(g,X,top+w*.5+dy,w,h,col));}
+    if(kind==='flat'){const s=Math.min(115,cw-26),[sp,per,vs]=grid(s*1.1,s*1.1,8,10);lay(sp,per,vs,(g,X,dy)=>flat3(g,X,top+s*.1+dy,s,col));}}
+  else{// smaller than a mini: a mini cut into 10 slices, 100 sticks, 1000 tiny cubes
+    if(kind==='flat'){const s=M,d=Math.max(2,s*.08),[sp,per,vs]=grid(s+d,s+d,7,6,5);lay(sp,per,vs,(g,X,dy)=>{faces(g,X,top+d+dy,d,s,s*.35,col);});}
+    if(kind==='long'){const w=Math.max(3,M*.12),h=M,[sp,per,vs]=grid(w*1.5,h+w,6,8,10);lay(sp,per,vs,(g,X,dy)=>faces(g,X,top+w*.5+dy,w,h,w*.5,col));}
+    if(kind==='cube'){const s=Math.max(6,M*.25),[sp,per,vs]=grid(s*1.35,s*1.35,6,6,10);lay(sp,per,vs,(g,X,dy)=>cube3(g,X,top+s*.35+dy,s,col));}}
+  {const nm=bName(c.e)+'s',w=nm.split(' ');if(cw<130&&w.length>1){txt(svg,x+cw/2,Y1-22,w[0],11,'#64748b','middle','600');txt(svg,x+cw/2,Y1-8,w[1],11,'#64748b','middle','600');}else txt(svg,x+cw/2,Y1-8,nm,13,'#64748b','middle','600');}}
 /* ---------- draw ---------- */
 function render(){
   svg.innerHTML='';
-  if(rep==='b10'&&wholeAuto)bigWhole=minE<0||!!(cnt[-1]||cnt[-2]||cnt[-3]);
+  if(rep==='b10'&&wholeAuto)bigWhole=false;
   $('wholeBtn').textContent=bigWhole?'1 whole = block':'1 whole = mini';$('wholeBtn').style.display=rep==='b10'?'':'none';
   const V=vis(),cw=1000/V.length,HY=78,BY0=HY,BY1=rep==='dig'?470:410,dig=rep==='dig';
   const nz=V.map((q,i)=>cnt[q.e]?i:-1).filter(i=>i>=0),first=nz.length?nz[0]:-1,last=nz.length?nz[nz.length-1]:-1,onesI=V.findIndex(q=>q.e===0);
@@ -162,7 +172,7 @@ $('minSel').onchange=e=>{setRange(maxE,+e.target.value);render();};
 function setRep(r){rep=r;document.querySelectorAll('[data-rep]').forEach(b=>b.classList.toggle('on',b.dataset.rep===r));
   if(r==='dig'&&COLS.some(c=>cnt[c.e]>9))msg('Some columns had 10 or more. Trade them first, or they show in red.');
   $('hint').textContent=r==='dig'?'Use ▲ and ▼ to change each digit. Use "Hide leading zeros" to show how the number is written. Choose how many places to show with "Biggest place" and "Smallest place".'
-   :'Tap inside a column to add '+(r==='b10'?'a block':'a counter')+', or tap '+(r==='b10'?'a block':'a counter')+' to remove it. When a column has 10 or more, trade 10 of them for 1 in the next place to the left. Trade 1 for 10 to break it into the next place to the right.'+(r==='b10'?' With decimals showing, the block (big cube) is 1 whole: flat = 0.1, long = 0.01, mini = 0.001.':'');
+   :'Tap inside a column to add '+(r==='b10'?'a block':'a counter')+', or tap '+(r==='b10'?'a block':'a counter')+' to remove it. When a column has 10 or more, trade 10 of them for 1 in the next place to the left. Trade 1 for 10 to break it into the next place to the right.'+(r==='b10'?' The mini (small cube) is 1. For decimals, the mini is cut up: a tenth slice is 0.1, a hundredth stick is 0.01 and a thousandth cube is 0.001. "1 whole = block" makes the big cube 1 instead (flat 0.1, long 0.01, mini 0.001).':'');
   render();}
 document.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>setRep(b.dataset.rep));
 function toggle(id,get,set){$(id).onclick=e=>{set(!get());e.target.classList.toggle('on',get());render();};}
