@@ -14,6 +14,7 @@ button.on{background:#2563eb;border-color:#2563eb;color:#fff}
 .run:hover{background:#15803d}
 #spinCfg{display:none;gap:6px;align-items:center}
 #spinCfg input{width:44px;padding:5px;text-align:center}
+select{font:inherit;font-size:15px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:10px;background:#fff}
 .cdot{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle}
 .wrap{display:flex;flex-wrap:wrap;gap:12px;padding:10px}
 #stage{flex:0 0 340px;max-width:100%}
@@ -27,11 +28,8 @@ svg{display:block;width:100%;height:auto;user-select:none}
 </style></head><body>
 <div class="bar"><span class="title">Chance Experiments</span>
 <button data-e="coin" class="on">🪙 Coin</button><button data-e="die">🎲 One die</button><button data-e="dice2">🎲🎲 Two dice (total)</button><button data-e="spin">🎡 Spinner</button>
-<span id="spinCfg">Sections:
-<span class="cdot" style="background:#ef4444"></span><input type="number" min="0" max="8" value="1" data-i="0">
-<span class="cdot" style="background:#3b82f6"></span><input type="number" min="0" max="8" value="1" data-i="1">
-<span class="cdot" style="background:#22c55e"></span><input type="number" min="0" max="8" value="1" data-i="2">
-<span class="cdot" style="background:#facc15"></span><input type="number" min="0" max="8" value="1" data-i="3">
+<span id="spinCfg">Colours: <select id="nCol"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select>
+&nbsp;Sections of each: <span id="secIns" style="display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center"></span>
 </span>
 </div>
 <div class="bar">
@@ -52,13 +50,13 @@ function el(tag,a,p){const e=document.createElementNS(NS,tag);for(const k in a)e
 function txt(p,x,y,s,fs,fill,wt){const t=el('text',{x,y,'font-size':fs,fill:fill||'#1f2937','text-anchor':'middle','font-weight':wt||'normal'},p);t.textContent=s;return t;}
 const $=id=>document.getElementById(id);
 const svg=$('svg'),chart=$('chart');
-const SC=['#ef4444','#3b82f6','#22c55e','#facc15'],SN=['Red','Blue','Green','Yellow'];
+const SC=['#ef4444','#3b82f6','#22c55e','#facc15','#a855f7','#f97316','#ec4899','#14b8a6'],SN=['Red','Blue','Green','Yellow','Purple','Orange','Pink','Teal'];
 let showProb=false,exp='coin',counts={},trials=0,showExp=false,pct=false,last=null,spinSec=[1,1,1,1],spinAng=0;
 function outcomes(){
   if(exp==='coin')return [['H','Heads',1/2],['T','Tails',1/2]];
   if(exp==='die')return [1,2,3,4,5,6].map(v=>[v,String(v),1/6]);
   if(exp==='dice2')return Array.from({length:11},(_,i)=>{const s=i+2;return [s,String(s),(6-Math.abs(s-7))/36];});
-  const tot=spinSec.reduce((a,b)=>a+b,0);return SC.map((c,i)=>[i,SN[i],spinSec[i]/tot]).filter(o=>o[2]>0);
+  const tot=spinSec.reduce((a,b)=>a+b,0);return spinSec.map((n,i)=>[i,SN[i],n/tot]).filter(o=>o[2]>0);
 }
 function roll(){
   if(exp==='coin')return Math.random()<.5?'H':'T';
@@ -110,7 +108,12 @@ function run(n){for(let i=0;i<n;i++){const v=roll();counts[v]=(counts[v]||0)+1;t
 function reset(){counts={};trials=0;last=null;$('last').textContent='';drawStage(null);drawResults();}
 document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{exp=b.dataset.e;document.querySelectorAll('[data-e]').forEach(x=>x.classList.toggle('on',x===b));$('spinCfg').style.display=exp==='spin'?'flex':'none';reset();});
 document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>run(+b.dataset.n));
-document.querySelectorAll('#spinCfg input').forEach(inp=>inp.onchange=()=>{let v=Math.max(0,Math.min(8,Math.round(+inp.value||0)));inp.value=v;spinSec[+inp.dataset.i]=v;if(spinSec.every(x=>!x)){spinSec[0]=1;document.querySelector('#spinCfg input').value=1;}reset();});
+function buildSecIns(){
+  $('secIns').innerHTML=spinSec.map((n,i)=>`<span class="cdot" style="background:${SC[i]}" title="${SN[i]}"></span><input type="number" min="0" max="8" value="${n}" data-i="${i}" aria-label="${SN[i]} sections">`).join('');
+  document.querySelectorAll('#secIns input').forEach(inp=>inp.onchange=()=>{let v=Math.max(0,Math.min(8,Math.round(+inp.value||0)));inp.value=v;spinSec[+inp.dataset.i]=v;if(spinSec.every(x=>!x)){spinSec[0]=1;document.querySelector('#secIns input').value=1;}reset();});
+}
+$('nCol').onchange=()=>{const n=+$('nCol').value;spinSec=Array.from({length:n},(_,i)=>spinSec[i]??1);if(spinSec.every(x=>!x))spinSec[0]=1;buildSecIns();reset();};
+buildSecIns();
 $('resetBtn').onclick=reset;
 function toFrac(p){for(let d=1;d<=36;d++){const n=Math.round(p*d);if(Math.abs(n/d-p)<1e-9){return n+'/'+d;}}return p.toFixed(2);}
 $('probBtn').onclick=e=>{showProb=!showProb;e.target.classList.toggle('on',showProb);drawResults();};
