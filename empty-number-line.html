@@ -37,7 +37,7 @@ svg{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:no
 <button data-tnext="1">to the next hour</button>
 <span>or <input id="customT" placeholder="minutes" style="width:100px"> <button id="customTBtn">Jump</button></span>
 </div>
-<svg id="svg" viewBox="0 0 1000 300"></svg>
+<svg id="svg" viewBox="0 0 1000 330"></svg>
 <div id="sum"></div>
 <div class="hint">An empty number line isn't drawn to scale, so the jumps show your thinking. Counting up to a friendly number first (the next 10, 100 or 1000) is often the quickest way to subtract or find a difference. In Time mode, jump to the next hour, then whole hours, then the minutes left over.</div>
 <script>
@@ -60,11 +60,24 @@ function render(){
   // x positions: cumulative unscaled widths, then fit to the screen
   let xs=[0];jumps.forEach(d=>xs.push(xs[xs.length-1]+Math.sign(d)*widthOf(d)));
   const hasT=target!==null&&target!==undefined;
-  let lo=Math.min(...xs),hi=Math.max(...xs);
   const reached=hasT&&vals[vals.length-1]===target;
-  if(hasT&&!reached)hi=Math.max(hi,xs[xs.length-1]+(target>vals[vals.length-1]?160:0)),lo=Math.min(lo,xs[xs.length-1]-(target<vals[vals.length-1]?160:0));
-  const span=Math.max(hi-lo,1),sc=Math.min(1.6,860/span),X=x=>70+(x-lo)*sc+(860-span*sc)/2*(span*sc<860?1:0),LY=190;
+  // unscaled position of the finish: inside the jump that passes it, otherwise beyond the furthest point reached
+  let xt=null;
+  if(hasT){
+    for(let i=jumps.length-1;i>=0&&xt===null;i--){const a=vals[i],b=vals[i+1];if(a!==b&&(target-a)*(target-b)<=0)xt=xs[i]+(xs[i+1]-xs[i])*(target-a)/(b-a);}
+    if(xt===null&&target===start)xt=0;
+    if(xt===null){const mx=Math.max(...vals),mn=Math.min(...vals);
+      xt=target>mx?xs[vals.indexOf(mx)]+Math.max(60,widthOf(target-mx)):xs[vals.indexOf(mn)]-Math.max(60,widthOf(mn-target));}
+  }
+  // the start and finish sit at the two ends (L and R); arrowheads beyond them show the numbers keep going
+  const L=90,R=910,LY=190;
+  const lo=Math.min(...xs,...(hasT?[xt]:[])),hi=Math.max(...xs,...(hasT?[xt]:[])),span=hi-lo;
+  const sc=span===0?1:hasT?(R-L)/span:Math.min(1.6,(R-L)/span);
+  const rightAlign=!hasT&&span>0&&hi===0; // no finish and only counting back: start at the right end
+  const X=x=>rightAlign?R-(hi-x)*sc:L+(x-lo)*sc;
   el('line',{x1:30,x2:970,y1:LY,y2:LY,stroke:'#1f2937','stroke-width':3},svg);
+  el('polygon',{points:`14,${LY} 36,${LY-10} 36,${LY+10}`,fill:'#1f2937'},svg);
+  el('polygon',{points:`986,${LY} 964,${LY-10} 964,${LY+10}`,fill:'#1f2937'},svg);
   jumps.forEach((d,i)=>{
     const x1=X(xs[i]),x2=X(xs[i+1]),fw=d>0,h=Math.min(95,22+Math.abs(x2-x1)*0.32),mx=(x1+x2)/2,y0=fw?LY-6:LY+6,cy=fw?y0-2*h:y0+2*h,col=fw?'#16a34a':'#dc2626';
     el('path',{d:`M${x1} ${y0} Q${mx} ${cy} ${x2} ${y0}`,fill:'none',stroke:col,'stroke-width':3},svg);
@@ -74,10 +87,10 @@ function render(){
   const seen=new Set();
   vals.forEach((v,i)=>{const x=X(xs[i]);el('line',{x1:x,x2:x,y1:LY-12,y2:LY+12,stroke:'#1f2937','stroke-width':2.5},svg);
     const key=Math.round(x);if(seen.has(key))return;seen.add(key);
-    const below=jumps.length&&jumps[Math.max(0,i-1)]<0;txt(svg,x,below?LY-22:LY+34,fmt(v),i===0?17:15,i===0?'#1d4ed8':'#111827',i===0||(reached&&i===vals.length-1)?'800':'600');});
-  if(hasT&&!reached){const cur=vals[vals.length-1],xt=X(xs[xs.length-1])+(target>cur?150:-150)*sc;
-    el('line',{x1:xt,x2:xt,y1:LY-14,y2:LY+14,stroke:'#7c3aed','stroke-width':3},svg);txt(svg,xt,LY+34,fmt(target),16,'#7c3aed','800');txt(svg,xt,LY-24,'🏁',22);
-    el('line',{x1:X(xs[xs.length-1])+8,x2:xt-8,y1:LY+52,y2:LY+52,stroke:'#c4b5fd','stroke-width':2,'stroke-dasharray':'5 5'},svg);}
+    const below=jumps.length&&jumps[Math.max(0,i-1)]<0;txt(svg,x,below?LY-22:LY+34,fmt(v),i===0?17:15,i===0?'#1d4ed8':reached&&i===vals.length-1?'#7c3aed':'#111827',i===0||(reached&&i===vals.length-1)?'800':'600');});
+  if(hasT&&!reached){const xc=X(xs[xs.length-1]),xf=X(xt),dir=xf>xc?1:-1;
+    el('line',{x1:xf,x2:xf,y1:LY-14,y2:LY+14,stroke:'#7c3aed','stroke-width':3},svg);txt(svg,xf,LY+34,fmt(target),16,'#7c3aed','800');txt(svg,xf,LY-24,'🏁',22);
+    if(Math.abs(xf-xc)>20)el('line',{x1:xc+8*dir,x2:xf-8*dir,y1:LY+52,y2:LY+52,stroke:'#c4b5fd','stroke-width':2,'stroke-dasharray':'5 5'},svg);}
   // summary
   let s='';
   if(jumps.length){
